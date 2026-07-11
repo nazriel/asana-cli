@@ -1,16 +1,6 @@
-mod app;
-mod auth;
-mod cli;
-mod client;
-mod config;
-mod download;
-mod error;
-mod models;
-mod output;
-
 use clap::{Parser, error::ErrorKind};
 
-use crate::cli::Cli;
+use asana_cli::{app, cli::Cli, output};
 
 fn main() {
     let cli = match Cli::try_parse() {
@@ -33,6 +23,7 @@ fn main() {
                             "message": error.to_string(),
                             "status": null,
                             "request_id": null,
+                            "ambiguous": false,
                         }
                     })
                 );

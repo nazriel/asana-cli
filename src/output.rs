@@ -4,8 +4,8 @@ use crate::{
     download::{DownloadSummary, DownloadedAttachment},
     error::{Error, Result},
     models::{
-        Attachment, AuthStatus, Collection, Project, Section, Story, Task, TaskWithRelations, User,
-        Workspace,
+        Attachment, AuthStatus, Collection, ProfileStatus, Project, Section, Story, Task,
+        TaskWithRelations, User, Workspace,
     },
 };
 
@@ -13,6 +13,71 @@ pub fn emit_json<T: Serialize>(value: &T) -> Result<()> {
     let output = serde_json::to_string_pretty(value)?;
     println!("{output}");
     Ok(())
+}
+
+pub fn print_json_value(value: &serde_json::Value) -> Result<()> {
+    emit_json(value)
+}
+
+pub fn print_generic_value(value: &serde_json::Value) -> Result<()> {
+    if let Some(data) = value.get("data").and_then(serde_json::Value::as_array) {
+        println!("GID\tTYPE\tNAME");
+        for item in data {
+            println!(
+                "{}\t{}\t{}",
+                item.get("gid")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or(""),
+                item.get("resource_type")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or(""),
+                compact(
+                    item.get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                )
+            );
+        }
+        print_next_offset(value.get("next_offset").and_then(serde_json::Value::as_str));
+        return Ok(());
+    }
+    if let Some(operation) = value.get("operation").and_then(serde_json::Value::as_str) {
+        println!("Completed: {operation}");
+        if let Some(path) = value.get("path").and_then(serde_json::Value::as_str) {
+            println!("Resource:  {path}");
+        }
+        return Ok(());
+    }
+    if let Some(gid) = value.get("gid").and_then(serde_json::Value::as_str) {
+        println!(
+            "{}",
+            value
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("Asana resource")
+        );
+        println!("GID: {gid}");
+        if let Some(url) = value
+            .get("permalink_url")
+            .and_then(serde_json::Value::as_str)
+        {
+            println!("URL: {url}");
+        }
+        return Ok(());
+    }
+    print_json_value(value)
+}
+
+pub fn print_profiles(profiles: &[ProfileStatus]) {
+    println!("ACTIVE\tPROFILE\tWORKSPACE");
+    for profile in profiles {
+        println!(
+            "{}\t{}\t{}",
+            if profile.active { "*" } else { "" },
+            profile.name,
+            profile.workspace_gid.as_deref().unwrap_or("")
+        );
+    }
 }
 
 pub fn print_error(error: &Error, json: bool) {
@@ -23,6 +88,7 @@ pub fn print_error(error: &Error, json: bool) {
                 "message": error.to_string(),
                 "status": error.status(),
                 "request_id": error.request_id(),
+                "ambiguous": matches!(error, Error::AmbiguousWrite(_)),
             }
         });
         match serde_json::to_string(&body) {
@@ -47,6 +113,7 @@ pub fn print_login(user: &User) {
 }
 
 pub fn print_auth_status(status: &AuthStatus) {
+    println!("Profile:          {}", status.profile);
     println!(
         "Authenticated as: {}",
         status.user.name.as_deref().unwrap_or("unknown user")

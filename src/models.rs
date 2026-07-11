@@ -105,6 +105,8 @@ pub struct Task {
     #[serde(default)]
     pub start_on: Option<String>,
     #[serde(default)]
+    pub start_at: Option<String>,
+    #[serde(default)]
     pub notes: Option<String>,
     #[serde(default)]
     pub html_notes: Option<String>,
@@ -120,6 +122,20 @@ pub struct Task {
     pub workspace: Option<Resource>,
     #[serde(default)]
     pub memberships: Option<Vec<TaskMembership>>,
+    #[serde(default)]
+    pub parent: Option<Resource>,
+    #[serde(default)]
+    pub followers: Option<Vec<Resource>>,
+    #[serde(default)]
+    pub tags: Option<Vec<Resource>>,
+    #[serde(default)]
+    pub num_subtasks: Option<u64>,
+    #[serde(default)]
+    pub custom_fields: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    pub custom_type: Option<Resource>,
+    #[serde(default)]
+    pub custom_type_status_option: Option<Resource>,
     #[serde(default)]
     pub resource_type: Option<String>,
 }
@@ -205,6 +221,15 @@ pub struct TaskWithRelations {
 pub struct AuthStatus {
     pub user: User,
     pub token_source: String,
+    pub profile: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace_gid: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ProfileStatus {
+    pub name: String,
+    pub active: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workspace_gid: Option<String>,
 }

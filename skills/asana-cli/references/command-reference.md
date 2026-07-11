@@ -2,6 +2,8 @@
 
 Load this reference for exact commands, filters, pagination, JSON shapes, and error recovery. Put global flags before the command in generated examples for consistency.
 
+For typed create/update/delete, comments, tags, attachments, task relationships, and sections, read [mutate-work.md](mutate-work.md).
+
 ## Common global flags
 
 ```text
@@ -11,6 +13,10 @@ asana --json [--workspace <workspace-gid>] [--verbose] <command>
 - Always use `--json` for agent-driven calls.
 - Use `--workspace` for one-command selection. Commands that operate directly on a task or attachment GID do not require it.
 - Use `--verbose` only for diagnosis. Diagnostics go to stderr and secrets are redacted.
+- Use `--profile <name>` for a one-command profile override.
+- Use `--fields <field,...>` to replace a typed command's default response fields.
+- Use `--all --max-items <n>` to consume collection pages with an explicit safety cap. Manual offsets remain available.
+- Use `--request-timeout 30s` to override the 60-second request timeout.
 
 ## Authentication and workspace discovery
 
@@ -131,8 +137,8 @@ Comment fields include `gid`, `created_at`, `created_by`, `text`, `html_text`, a
 List attachment metadata:
 
 ```bash
-asana --json attachment list <task-gid> --limit 100
-asana --json attachment list <task-gid> --limit 100 --offset '<opaque-offset>'
+asana --json attachment list <parent-gid> --limit 100
+asana --json attachment list <parent-gid> --limit 100 --offset '<opaque-offset>'
 ```
 
 Download one known attachment:
@@ -203,5 +209,8 @@ With `--json`, stdout contains successful data and stderr contains errors:
 | `3` | Missing or rejected authentication | Ask the user to authenticate locally; never request the token in chat. |
 | `4` | Asana API or permission error | Report status/message; narrow or change the query only when justified. |
 | `5` | Some `download-all` items failed | Parse valid stdout summary and report both successes and failures. |
+| `6` | Destructive operation was not confirmed | Obtain explicit user intent; use `--yes` only for the authorized action. |
+| `7` | Write outcome is ambiguous | Inspect the target and do not retry automatically. |
+| `9` | Async job failed or timed out | Report job GID/status and inspect the job when useful. |
 
 The client already retries rate limits and transient server failures. Do not create an unbounded retry loop. Preserve `request_id` when reporting API errors because it helps diagnosis.

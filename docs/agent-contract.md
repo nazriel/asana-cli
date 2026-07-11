@@ -1,10 +1,15 @@
 # Agent contract
 
+Contract version: 2
+
 This document is the stable integration surface for an AI skill or a script using `asana`.
 
 ## Safety and authentication
 
-- The MVP has no write commands.
+- Prefer typed commands. `asana api` can perform raw writes when no typed command exists.
+- Perform a mutation only from explicit user intent and read the current target first.
+- Use `--dry-run` for destructive, broad, ambiguous, or administrative mutations.
+- Never automatically retry an `ambiguous_write` result.
 - Authenticate with an OS-keyring token via `asana auth login`, or set `ASANA_ACCESS_TOKEN` for the current process.
 - Do not print, log, or pass the token as a command argument.
 - Pass `--json` for every agent-driven invocation.
@@ -24,9 +29,24 @@ This document is the stable integration surface for an AI skill or a script usin
 | Read a task description | `asana task get <task-gid> --json` |
 | Read task plus comments/files | `asana task get <task-gid> --comments --attachments --json` |
 | List human comments | `asana task comments <task-gid> --json` |
-| List attachments | `asana attachment list <task-gid> --json` |
+| List attachments | `asana attachment list <parent-gid> --json` |
 | Download one attachment | `asana attachment download <attachment-gid> --json` |
 | Download all task attachments | `asana attachment download-all <task-gid> --directory <path> --json` |
+| List profiles | `asana profile list --json` |
+| Raw REST read | `asana api get /relative/path --query key=value --json` |
+| Preview a raw write | `asana api post /relative/path --data @file --dry-run --json` |
+| Execute a raw write | `asana api post\|put /relative/path --data @file --json` |
+| Delete through raw API | `asana api delete /relative/path --yes --json` |
+| Upload multipart file | `asana api upload /attachments --file <path> --field parent=<gid> --json` |
+| Inspect or wait for job | `asana job get\|wait <job-gid> --json` |
+| Create task | `asana task create --name <name> [options] --json` |
+| Update task | `asana task update <gid> [changes] --expect-modified-at <timestamp> --json` |
+| Delete task | `asana task delete <gid> --yes --json` |
+| Add/update/delete comment | `asana task comment add\|update\|delete ... --json` |
+| List/create/update/delete tag | `asana tag list\|create\|update\|delete ... --json` |
+| Add/remove task tag | `asana task tag add\|remove <task-gid> <tag-gid> --json` |
+| Upload/delete attachment | `asana attachment upload\|delete ... --json` |
+| Resolve object by name | `asana typeahead <type> <query> --json` |
 
 Every command accepts `--workspace <workspace-gid>` as a one-command override when the command needs a workspace.
 
@@ -101,6 +121,9 @@ Errors are JSON on stderr when `--json` is active and never contaminate stdout:
 | `3` | Missing or rejected authentication |
 | `4` | Asana API error, including permissions and Premium-only search |
 | `5` | Partial `attachment download-all` failure |
+| `6` | Destructive operation was not confirmed |
+| `7` | A write may or may not have reached Asana; inspect before retrying |
+| `9` | An asynchronous job failed or timed out |
 
 ## Operational notes
 
@@ -110,3 +133,9 @@ Errors are JSON on stderr when `--json` is active and never contaminate stdout:
 - `task search` has no `--offset`: Asana says its search ordering is not stable. Limit it to the smallest useful result set.
 - Comments are stories whose `resource_subtype` is `comment_added`; system activity is excluded.
 - Attachment filenames supplied by Asana are sanitized. Existing destination files are never overwritten.
+- `--all` consumes cursors until completion or `--max-items` (default 10,000) is reached. A non-null `next_offset` means the cap stopped collection.
+- Raw paths must be relative and catalogued. `--allow-unknown-endpoint` is only for a newly documented official endpoint.
+- JSON passed to raw POST/PUT is the inner `data` object; the CLI creates the Asana envelope.
+- Typed task updates are patches: pass only requested changes. Use `--expect-modified-at` from a direct prior `task get` when available.
+- Typed destructive commands require interactive confirmation or `--yes`; agents use `--yes` only for explicitly authorized changes.
+- Verify mutations through direct resource or relationship reads. Task search is eventually consistent.

@@ -29,6 +29,18 @@ pub enum Error {
 
     #[error("partial download failure: {0}")]
     PartialDownload(String),
+
+    #[error("destructive operation was not confirmed: {0}")]
+    Confirmation(String),
+
+    #[error("write outcome is ambiguous: {0}")]
+    AmbiguousWrite(String),
+
+    #[error("stale resource precondition: {0}")]
+    Stale(String),
+
+    #[error("asynchronous job failed or timed out: {0}")]
+    Job(String),
 }
 
 impl Error {
@@ -39,6 +51,9 @@ impl Error {
             Self::Api { status: 401, .. } => 3,
             Self::Api { .. } => 4,
             Self::PartialDownload(_) => 5,
+            Self::Confirmation(_) => 6,
+            Self::AmbiguousWrite(_) | Self::Stale(_) => 7,
+            Self::Job(_) => 9,
             Self::Network(_) | Self::Io(_) | Self::Json(_) => 1,
         }
     }
@@ -49,11 +64,17 @@ impl Error {
             Self::Config(_) => "config",
             Self::Auth(_) => "auth",
             Self::Api { status: 401, .. } => "auth",
+            Self::Api { status: 402, .. } => "plan_required",
+            Self::Api { status: 403, .. } => "permission",
             Self::Api { .. } => "api",
             Self::Network(_) => "network",
             Self::Io(_) => "io",
             Self::Json(_) => "invalid_response",
             Self::PartialDownload(_) => "partial_download",
+            Self::Confirmation(_) => "confirmation_required",
+            Self::AmbiguousWrite(_) => "ambiguous_write",
+            Self::Stale(_) => "stale_resource",
+            Self::Job(_) => "job_failed",
         }
     }
 

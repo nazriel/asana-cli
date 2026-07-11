@@ -1,6 +1,6 @@
 [package]
 name = "asana-cli"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2024"
 description = "A small, agent-friendly CLI for the Asana API"
 license = "MIT"
@@ -10,10 +10,12 @@ name = "asana"
 path = "src/main.rs"
 
 [dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 clap = { version = "4.5", features = ["derive"] }
 directories = "6.0"
+humantime = "2.2"
 keyring = "4.1"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
 rpassword = "7.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

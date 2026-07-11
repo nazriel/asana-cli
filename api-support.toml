@@ -1,0 +1,128 @@
+schema_version = 1
+api_baseline = "2026-07-11"
+
+# This foundation manifest catalogs public REST resource families. Later phases
+# expand each family to a parameter-level endpoint matrix.
+[[resources]]
+name = "access_requests"
+prefixes = ["access_requests"]
+status = "raw"
+
+[[resources]]
+name = "agents_and_ai_studio"
+prefixes = ["agents", "ai_studio"]
+status = "raw"
+
+[[resources]]
+name = "allocations_budgets_rates"
+prefixes = ["allocations", "budgets", "rates"]
+status = "raw"
+
+[[resources]]
+name = "attachments"
+prefixes = ["attachments"]
+status = "typed"
+
+[[resources]]
+name = "audit_batch_events"
+prefixes = ["audit_log_events", "batch", "events"]
+status = "raw"
+
+[[resources]]
+name = "custom_fields_and_types"
+prefixes = ["custom_fields", "custom_field_settings", "custom_types"]
+status = "raw"
+
+[[resources]]
+name = "exports"
+prefixes = ["exports", "graph_exports", "resource_exports", "organization_exports"]
+status = "raw"
+
+[[resources]]
+name = "goals"
+prefixes = ["goals", "goal_relationships"]
+status = "raw"
+
+[[resources]]
+name = "jobs"
+prefixes = ["jobs"]
+status = "typed"
+
+[[resources]]
+name = "memberships"
+prefixes = ["memberships", "portfolio_memberships", "project_memberships", "team_memberships", "workspace_memberships"]
+status = "raw"
+
+[[resources]]
+name = "ooo_entries"
+prefixes = ["ooo_entries"]
+status = "raw"
+
+[[resources]]
+name = "portfolios"
+prefixes = ["portfolios"]
+status = "raw"
+
+[[resources]]
+name = "projects"
+prefixes = ["projects", "project_briefs", "project_portfolio_settings", "project_statuses", "project_templates"]
+status = "partial_typed"
+
+[[resources]]
+name = "reactions"
+prefixes = ["reactions"]
+status = "typed"
+
+[[resources]]
+name = "roles_and_rules"
+prefixes = ["roles", "rules"]
+status = "raw"
+
+[[resources]]
+name = "sections"
+prefixes = ["sections"]
+status = "typed"
+
+[[resources]]
+name = "status_updates"
+prefixes = ["status_updates"]
+status = "raw"
+
+[[resources]]
+name = "stories"
+prefixes = ["stories"]
+status = "typed"
+
+[[resources]]
+name = "tags"
+prefixes = ["tags"]
+status = "typed"
+
+[[resources]]
+name = "tasks_and_user_task_lists"
+prefixes = ["tasks", "user_task_lists"]
+status = "typed"
+
+[[resources]]
+name = "task_templates"
+prefixes = ["task_templates"]
+status = "raw"
+
+[[resources]]
+name = "teams_users_workspaces"
+prefixes = ["teams", "users", "workspaces"]
+status = "partial_typed"
+
+[[resources]]
+name = "time"
+prefixes = ["time_periods", "time_tracking_categories", "time_tracking_entries", "timesheet_approval_statuses"]
+status = "raw"
+
+[[resources]]
+name = "webhooks"
+prefixes = ["webhooks"]
+status = "raw"
+
+[[excluded]]
+name = "app_components"
+reason = "Lookups, modal forms, rule actions, and widgets are callbacks implemented by an integration server, not REST operations invoked by a local CLI."

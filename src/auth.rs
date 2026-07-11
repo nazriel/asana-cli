@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, time::Duration};
 
 use keyring::Entry;
 
@@ -9,7 +9,6 @@ use crate::{
 };
 
 const KEYRING_SERVICE: &str = "asana-cli";
-const KEYRING_ACCOUNT: &str = "default";
 
 #[derive(Debug, Clone, Copy)]
 pub enum TokenSource {
@@ -26,14 +25,14 @@ impl TokenSource {
     }
 }
 
-pub fn resolve_token() -> Result<(String, TokenSource)> {
+pub fn resolve_token(profile: &str) -> Result<(String, TokenSource)> {
     if let Ok(token) = env::var("ASANA_ACCESS_TOKEN")
         && !token.trim().is_empty()
     {
         return Ok((token, TokenSource::Environment));
     }
 
-    let entry = keyring_entry()?;
+    let entry = keyring_entry(profile)?;
     let token = entry.get_password().map_err(|error| {
         Error::Auth(format!(
             "no token found in the keyring ({error}); run `asana auth login` or set ASANA_ACCESS_TOKEN"
@@ -49,7 +48,7 @@ pub fn resolve_token() -> Result<(String, TokenSource)> {
     Ok((token, TokenSource::Keyring))
 }
 
-pub fn login(verbose: bool) -> Result<User> {
+pub fn login(profile: &str, verbose: bool, request_timeout: Duration) -> Result<User> {
     let token = rpassword::prompt_password("Asana personal access token: ")
         .map_err(|error| Error::Auth(format!("could not read token: {error}")))?;
 
@@ -57,28 +56,32 @@ pub fn login(verbose: bool) -> Result<User> {
         return Err(Error::Usage("token cannot be empty".to_owned()));
     }
 
-    let client = AsanaClient::new(token.clone(), verbose)?;
+    let client = AsanaClient::new_with_options(token.clone(), verbose, None, request_timeout)?;
     let user = client.current_user()?;
 
-    keyring_entry()?.set_password(&token).map_err(|error| {
-        Error::Auth(format!(
-            "could not store token in the operating-system keyring: {error}"
-        ))
-    })?;
+    keyring_entry(profile)?
+        .set_password(&token)
+        .map_err(|error| {
+            Error::Auth(format!(
+                "could not store token in the operating-system keyring: {error}"
+            ))
+        })?;
 
     Ok(user)
 }
 
-pub fn logout() -> Result<()> {
-    keyring_entry()?.delete_credential().map_err(|error| {
-        Error::Auth(format!(
-            "could not remove the token from the keyring: {error}"
-        ))
-    })
+pub fn logout(profile: &str) -> Result<()> {
+    keyring_entry(profile)?
+        .delete_credential()
+        .map_err(|error| {
+            Error::Auth(format!(
+                "could not remove the token from the keyring: {error}"
+            ))
+        })
 }
 
-fn keyring_entry() -> Result<Entry> {
-    Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT).map_err(|error| {
+fn keyring_entry(profile: &str) -> Result<Entry> {
+    Entry::new(KEYRING_SERVICE, profile).map_err(|error| {
         Error::Auth(format!(
             "could not access the operating-system keyring: {error}"
         ))

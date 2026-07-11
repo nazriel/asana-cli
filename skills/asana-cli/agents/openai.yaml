@@ -1,0 +1,4 @@
+interface:
+  display_name: "Asana CLI"
+  short_description: "Read Asana tasks, comments, and attachments"
+  default_prompt: "Use $asana-cli to find and inspect relevant work in Asana."

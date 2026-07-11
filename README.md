@@ -78,6 +78,10 @@ The Asana task-search endpoint does not support stable cursor pagination, so `as
 
 JSON data always goes to stdout. Errors and `--verbose` diagnostics go to stderr. See [the agent contract](docs/agent-contract.md) for exact output and exit-code behavior.
 
+## AI skill
+
+The repository includes an agent skill in [`skills/asana-cli`](skills/asana-cli). Install or link that directory in your agent's skill location to teach it how to query Asana safely through this CLI, handle pagination and errors, and retrieve attachments without exposing credentials.
+
 ## Download behavior
 
 Attachment URLs are refreshed immediately before each download. Downloads stream to a temporary file and are renamed only after success. Names derived from Asana are made safe for the chosen directory, existing files are never overwritten, and `download-all` continues after individual failures. It exits with code `5` when any attachment fails.
@@ -91,4 +95,4 @@ Attachment URLs are refreshed immediately before each download. Downloads stream
 
 ## Scope
 
-The CLI uses Asana personal access tokens and is intentionally read-only. OAuth, multiple profiles, writes, custom-field search, caching, and a generated AI skill are future work.
+The CLI uses Asana personal access tokens and is intentionally read-only. OAuth, multiple profiles, writes, custom-field search, and caching are future work.

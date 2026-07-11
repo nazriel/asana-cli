@@ -1,18 +1,18 @@
-# Full Asana REST API parity plan
+# Asana CLI delivery plan
 
-Status: Phase 0 foundation and typed Phase 1 daily workflows implemented; later resource phases pending  
-Target: `asana` 1.0  
+Status: final planned scope implemented through Phase 4 strategic/custom-data workflows
+Target: `asana` 0.5 for personal use
 API baseline: public Asana REST API catalog as of 2026-07-11
 
-## 1. Definition of parity
+## 1. Definition of the supported scope
 
-`asana` reaches full parity when every public Asana REST API endpoint is represented in a versioned support manifest as one of:
+The selected personal-use scope is complete when daily work, project collaboration, people/templates, custom fields, portfolios, and goals are available through stable typed commands. Every other known public REST resource remains represented in the support manifest as either:
 
 1. a stable, typed CLI command;
 2. an intentionally raw-only endpoint callable through `asana api` while a typed command is pending; or
 3. an explicit exclusion with a reason, such as an App Components callback implemented by an integration server rather than called by a local client.
 
-Parity means parity with the public REST API, not every feature visible in the Asana web UI. The API itself does not expose every UI operation, and some resources are read-only or support only part of CRUD. The CLI must expose exactly the operations the API supports and must not simulate unsupported mutations.
+This is deliberately not a full public-API parity claim. Enterprise resource management, events, webhooks, batches, exports, and automated API-drift control are outside the planned product scope. They remain available through guarded `asana api` calls when needed.
 
 The initial 0.1 read-only commands remain backward-compatible through 1.x unless a security issue requires a break.
 
@@ -336,7 +336,7 @@ asana task delete 111 --yes
 
 Each phase ends with updated command help, JSON contract, parity manifest, agent reference, migration notes, and live sandbox smoke evidence for the endpoints added in that phase.
 
-### Phase 0 — scalable foundation
+### Phase 1 — scalable foundation
 
 - Refactor into library, generic transport, domain command modules, and method-aware retry.
 - Add request bodies, PUT/POST/DELETE, multipart uploads, typed errors for 402/scope/ambiguous writes.
@@ -346,7 +346,7 @@ Each phase ends with updated command help, JSON contract, parity manifest, agent
 
 Exit criterion: any catalogued REST endpoint is safely callable through `asana api`, even before its typed command exists.
 
-### Phase 1 — complete daily task workflows
+### Phase 2 — complete daily task workflows
 
 - Task CRUD and rich text.
 - Comments/story get/create/update/delete.
@@ -359,7 +359,7 @@ Exit criterion: any catalogued REST endpoint is safely callable through `asana a
 
 Exit criterion: a user or agent can triage, create, assign, schedule, classify, discuss, move, complete, reopen, and delete work without raw API calls.
 
-### Phase 2 — projects, people, and templates
+### Phase 3 — projects, people, and templates
 
 - Project CRUD/search/duplicate, relationships, brief, task counts, and status updates.
 - Project and task templates plus async jobs.
@@ -368,7 +368,7 @@ Exit criterion: a user or agent can triage, create, assign, schedule, classify, 
 
 Exit criterion: ordinary project administration and collaboration are covered by typed commands.
 
-### Phase 3 — portfolios, goals, and custom data
+### Phase 4 — portfolios, goals, and custom data (final)
 
 - Custom fields/options/settings and typed value encoding.
 - Portfolios/items/members/statuses.
@@ -377,23 +377,14 @@ Exit criterion: ordinary project administration and collaboration are covered by
 
 Exit criterion: strategic work and custom schema workflows do not require raw API calls.
 
-### Phase 4 — resource management and enterprise
+### Not planned
 
-- Time entries/categories/timesheets, allocations, rates, budgets, OOO.
-- Roles, exports, audit log, AI Studio usage, and agents.
-- Service-account/profile guardrails and licensing diagnostics.
+Former phases 5 and 6 are intentionally outside this personal-use roadmap:
 
-Exit criterion: every non-integration-server endpoint has a typed command unless the manifest records a reviewed raw-only exception.
+- resource-management and enterprise administration: time entries/categories/timesheets, allocations, rates, budgets, OOO, roles, exports, audit log, AI Studio usage, and agents;
+- infrastructure and drift control: events, webhooks, batches, cursor persistence, and automated OpenAPI comparison.
 
-### Phase 5 — events, webhooks, batches, and drift control
-
-- Event polling and explicit cursor persistence.
-- Webhook management and handshake-aware guidance.
-- Batch execution and partial-result reporting.
-- Automated comparison of the vendored API catalog with the latest official catalog/OpenAPI snapshot.
-- Release gate that rejects undocumented new or removed endpoints.
-
-Exit criterion: the parity manifest contains no unexplained gaps and API drift is detected before release.
+These resource families remain catalogued as raw support. They can be called through `asana api` without committing the project to ergonomic typed wrappers or an enterprise-grade release process.
 
 ## 10. Agent skill design
 
@@ -467,12 +458,10 @@ Preserve current codes and extend them without reusing meanings:
 
 JSON errors retain `code`, `message`, `status`, and `request_id`, and add optional `details`, `required_scope`, `required_plan`, `retry_after`, and `ambiguous` fields.
 
-## 13. Completion checklist
+## 13. Selected-scope completion checklist
 
-The 1.0 parity claim requires evidence for every item:
+The final personal-use scope requires evidence for every item:
 
-- every current public REST endpoint appears in the support manifest;
-- every endpoint is typed, raw-callable, or explicitly excluded with a reviewed reason;
 - all daily task workflows use typed commands;
 - tag and custom-field filtering work in list/search flows where the API supports them;
 - all supported CRUD operations have correct patch, clear, confirmation, and response semantics;
@@ -480,11 +469,11 @@ The 1.0 parity claim requires evidence for every item:
 - agent references contain no stale command or safety guidance;
 - help, generated docs, and manifest agree;
 - automated local verification passes;
-- supported live sandbox smoke suites pass;
 - no secret appears in stdout, stderr, dry-run, verbose logs, or saved config;
-- API catalog drift check is clean for the release baseline.
+- custom-field, portfolio, goal, membership, and strategic-work workflows use typed commands;
+- known out-of-scope resource families remain reachable through guarded raw API calls.
 
-## 14. First implementation slice
+## 14. Historical first implementation slice
 
 Begin with Phase 0 plus the smallest end-to-end Phase 1 vertical slice:
 

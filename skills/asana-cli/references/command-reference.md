@@ -2,7 +2,9 @@
 
 Load this reference for exact commands, filters, pagination, JSON shapes, and error recovery. Put global flags before the command in generated examples for consistency.
 
-For typed create/update/delete, comments, tags, attachments, task relationships, and sections, read [mutate-work.md](mutate-work.md).
+For typed create/update/delete, comments, tags, attachments, task relationships, and sections, read [mutate-work.md](mutate-work.md). For project administration, templates, people, memberships, and access requests, read [projects-and-people.md](projects-and-people.md).
+
+For custom-field schemas and values, read [custom-fields.md](custom-fields.md). For portfolios, goals, metrics, and strategic relationships, read [strategic-work.md](strategic-work.md).
 
 ## Common global flags
 
@@ -45,6 +47,8 @@ asana --json workspace use <workspace-gid>
 ```
 
 ## Projects
+
+This section covers project discovery. Read [projects-and-people.md](projects-and-people.md) before changing a project or its collaborators.
 
 ```bash
 asana --json --workspace <gid> project list

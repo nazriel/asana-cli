@@ -224,27 +224,65 @@ fn run_with_client(
                     Ok(())
                 }
             }
-        },
-        Command::Project { command } => match command {
-            ProjectCommand::List(args) => {
-                let workspace_gid = config::require_workspace(
-                    options.workspace_override.as_deref(),
-                    config,
-                    profile,
-                )?;
-                let archived = if args.all_projects {
-                    None
-                } else if args.archived {
-                    Some(true)
-                } else {
-                    Some(false)
-                };
-                let collection = collect_pages(&args.pagination, options, |page| {
-                    client.list_projects(&workspace_gid, archived, page)
+            WorkspaceCommand::Get { gid } => emit_raw_read(
+                client.raw_json(Method::GET, &format!("workspaces/{gid}"), &[], None)?,
+                options,
+            ),
+            WorkspaceCommand::Update(args) => {
+                let data = mutation_data(args.data.as_deref(), |data| {
+                    insert_optional_string(data, "name", args.name);
                 })?;
-                emit_collection(&collection, options.json, output::print_projects)
+                execute_write(
+                    Method::PUT,
+                    &format!("workspaces/{}", args.gid),
+                    data,
+                    "workspace.update",
+                    false,
+                    client,
+                    require_admin_context(options)?,
+                )
             }
+            WorkspaceCommand::UserAdd(args) => execute_write(
+                Method::POST,
+                &format!("workspaces/{}/addUser", args.gid),
+                keyed_value("user", Value::String(args.user)),
+                "workspace.user.add",
+                true,
+                client,
+                require_admin_context(options)?,
+            ),
+            WorkspaceCommand::UserRemove(args) => execute_write(
+                Method::POST,
+                &format!("workspaces/{}/removeUser", args.gid),
+                keyed_value("user", Value::String(args.user)),
+                "workspace.user.remove",
+                true,
+                client,
+                require_admin_context(options)?,
+            ),
         },
+        Command::Project { command } => run_project(command, client, config, profile, options),
+        Command::ProjectTemplate { command } => {
+            run_project_template(command, client, config, profile, options)
+        }
+        Command::TaskTemplate { command } => run_task_template(command, client, options),
+        Command::User { command } => run_user(command, client, config, profile, options),
+        Command::Team { command } => run_team(command, client, config, profile, options),
+        Command::Membership { command } => {
+            run_membership(command, client, config, profile, options)
+        }
+        Command::AccessRequest { command } => run_access_request(command, client, options),
+        Command::StatusUpdate { command } => run_status_update(command, client, options),
+        Command::CustomField { command } => {
+            run_custom_field(command, client, config, profile, options)
+        }
+        Command::CustomType { command } => run_custom_type(command, client, options),
+        Command::Portfolio { command } => run_portfolio(command, client, config, profile, options),
+        Command::Goal { command } => run_goal(command, client, config, profile, options),
+        Command::GoalRelationship { command } => run_goal_relationship(command, client, options),
+        Command::ProjectPortfolioSetting { command } => {
+            run_project_portfolio_setting(command, client, options)
+        }
         Command::Section { command } => match command {
             SectionCommand::List(args) => {
                 let collection = collect_pages(&args.pagination, options, |page| {
@@ -368,6 +406,1348 @@ fn run_with_client(
         Command::Auth { .. } | Command::Profile { .. } => {
             unreachable!("commands handled before authentication")
         }
+    }
+}
+
+fn run_project(
+    command: ProjectCommand,
+    client: &AsanaClient,
+    config: &Config,
+    profile: &str,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        ProjectCommand::List(args) => {
+            let archived = if args.all_projects {
+                None
+            } else {
+                Some(args.archived)
+            };
+            if args.team.is_some() || args.task.is_some() {
+                let path = match (args.team, args.task) {
+                    (Some(team), None) => format!("teams/{team}/projects"),
+                    (None, Some(task)) => format!("tasks/{task}/projects"),
+                    _ => unreachable!("clap enforces project list scope conflicts"),
+                };
+                let mut query = Vec::new();
+                push_query(&mut query, "archived", archived.map(|v| v.to_string()));
+                return emit_raw_collection(&path, query, &args.pagination, client, options);
+            }
+            let workspace = selected_workspace(config, profile, options)?;
+            let collection = collect_pages(&args.pagination, options, |page| {
+                client.list_projects(&workspace, archived, page)
+            })?;
+            emit_collection(&collection, options.json, output::print_projects)
+        }
+        ProjectCommand::Search(args) => {
+            let workspace = selected_workspace(config, profile, options)?;
+            let mut query = vec![("text".to_owned(), args.text)];
+            push_query(&mut query, "teams.any", args.team);
+            push_query(
+                &mut query,
+                "completed",
+                args.completed.map(|v| v.to_string()),
+            );
+            query.extend(args.filters);
+            emit_raw_collection(
+                &format!("workspaces/{workspace}/projects/search"),
+                query,
+                &args.pagination,
+                client,
+                options,
+            )
+        }
+        ProjectCommand::Get { gid } => emit_get(&format!("projects/{gid}"), client, options),
+        ProjectCommand::Create(args) => {
+            let workspace = selected_workspace(config, profile, options)?;
+            let team = args.team.clone();
+            let data = mutation_data(args.data.as_deref(), |data| {
+                insert_optional_string(data, "name", args.name);
+                insert_optional_string(data, "owner", args.owner);
+                insert_optional_string(data, "notes", args.notes);
+                insert_optional_string(data, "color", args.color);
+                insert_optional_string(data, "default_view", args.default_view);
+                insert_optional_bool(data, "public", args.public);
+                insert_optional_bool(data, "archived", args.archived);
+                insert_custom_field_values(data, args.custom_fields);
+            })?;
+            let path = team.map_or_else(
+                || format!("workspaces/{workspace}/projects"),
+                |gid| format!("teams/{gid}/projects"),
+            );
+            execute_write(
+                Method::POST,
+                &path,
+                data,
+                "project.create",
+                false,
+                client,
+                options,
+            )
+        }
+        ProjectCommand::Update(args) => {
+            let data = mutation_data(args.data.as_deref(), |data| {
+                insert_optional_string(data, "name", args.name);
+                insert_optional_string(data, "owner", args.owner);
+                insert_optional_string(data, "notes", args.notes);
+                insert_optional_string(data, "color", args.color);
+                insert_optional_string(data, "default_view", args.default_view);
+                insert_optional_bool(data, "public", args.public);
+                if args.archive {
+                    data.insert("archived".to_owned(), Value::Bool(true));
+                }
+                if args.unarchive {
+                    data.insert("archived".to_owned(), Value::Bool(false));
+                }
+                insert_custom_field_values(data, args.custom_fields);
+            })?;
+            execute_write(
+                Method::PUT,
+                &format!("projects/{}", args.gid),
+                data,
+                "project.update",
+                false,
+                client,
+                options,
+            )
+        }
+        ProjectCommand::Delete { gid } => execute_write(
+            Method::DELETE,
+            &format!("projects/{gid}"),
+            Value::Object(Default::default()),
+            "project.delete",
+            true,
+            client,
+            options,
+        ),
+        ProjectCommand::Duplicate(args) => {
+            let data = mutation_data(args.data.as_deref(), |object| {
+                object.insert("name".to_owned(), Value::String(args.name));
+                if !args.include.is_empty() {
+                    object.insert("include".to_owned(), Value::String(args.include.join(",")));
+                }
+            })?;
+            execute_write(
+                Method::POST,
+                &format!("projects/{}/duplicate", args.gid),
+                data,
+                "project.duplicate",
+                false,
+                client,
+                options,
+            )
+        }
+        ProjectCommand::TaskCounts { gid } => {
+            emit_get(&format!("projects/{gid}/task_counts"), client, options)
+        }
+        ProjectCommand::Member(args) => {
+            run_project_relation(args, "Members", "members", client, options)
+        }
+        ProjectCommand::Follower(args) => {
+            run_project_relation(args, "Followers", "followers", client, options)
+        }
+        ProjectCommand::CustomField(args) => {
+            let (endpoint, data, destructive) = if args.remove {
+                (
+                    "removeCustomFieldSetting",
+                    keyed_value("custom_field", Value::String(args.custom_field)),
+                    true,
+                )
+            } else {
+                (
+                    "addCustomFieldSetting",
+                    serde_json::json!({"custom_field": args.custom_field, "is_important": args.important}),
+                    false,
+                )
+            };
+            execute_write(
+                Method::POST,
+                &format!("projects/{}/{endpoint}", args.gid),
+                data,
+                "project.custom-field",
+                destructive,
+                client,
+                options,
+            )
+        }
+        ProjectCommand::CustomFields { gid, pagination } => emit_raw_collection(
+            &format!("projects/{gid}/custom_field_settings"),
+            Vec::new(),
+            &pagination,
+            client,
+            options,
+        ),
+        ProjectCommand::Brief { command } => run_project_brief(command, client, options),
+        ProjectCommand::SaveAsTemplate(args) => {
+            let mut data = serde_json::Map::new();
+            data.insert("name".to_owned(), Value::String(args.name));
+            data.insert("public".to_owned(), Value::Bool(args.public));
+            if let Some(team) = args.team {
+                data.insert("team".to_owned(), Value::String(team));
+            } else {
+                data.insert(
+                    "workspace".to_owned(),
+                    Value::String(selected_workspace(config, profile, options)?),
+                );
+            }
+            execute_write(
+                Method::POST,
+                &format!("projects/{}/saveAsTemplate", args.gid),
+                Value::Object(data),
+                "project.save-as-template",
+                false,
+                client,
+                options,
+            )
+        }
+    }
+}
+
+fn run_project_relation(
+    args: ProjectRelationArgs,
+    endpoint_suffix: &str,
+    key: &str,
+    client: &AsanaClient,
+    options: &GlobalOptions,
+) -> Result<()> {
+    let (verb, values, destructive) = if args.remove.is_empty() {
+        ("add", args.add, false)
+    } else {
+        ("remove", args.remove, true)
+    };
+    execute_write(
+        Method::POST,
+        &format!("projects/{}/{verb}{endpoint_suffix}", args.gid),
+        keyed_value(key, serde_json::json!(values)),
+        &format!("project.{}.{}", key.trim_end_matches('s'), verb),
+        destructive,
+        client,
+        options,
+    )
+}
+
+fn run_project_brief(
+    command: ProjectBriefCommand,
+    client: &AsanaClient,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        ProjectBriefCommand::Get { project } => emit_get(
+            &format!("projects/{project}/project_briefs"),
+            client,
+            options,
+        ),
+        ProjectBriefCommand::Create(args) => {
+            let data = brief_data(args.title, args.text, args.html_text, args.data.as_deref())?;
+            execute_write(
+                Method::POST,
+                &format!("projects/{}/project_briefs", args.project),
+                data,
+                "project-brief.create",
+                false,
+                client,
+                options,
+            )
+        }
+        ProjectBriefCommand::Update(args) => {
+            let data = brief_data(args.title, args.text, args.html_text, args.data.as_deref())?;
+            execute_write(
+                Method::PUT,
+                &format!("project_briefs/{}", args.gid),
+                data,
+                "project-brief.update",
+                false,
+                client,
+                options,
+            )
+        }
+        ProjectBriefCommand::Delete { gid } => execute_write(
+            Method::DELETE,
+            &format!("project_briefs/{gid}"),
+            Value::Object(Default::default()),
+            "project-brief.delete",
+            true,
+            client,
+            options,
+        ),
+    }
+}
+
+fn brief_data(
+    title: Option<String>,
+    text: Option<String>,
+    html_text: Option<String>,
+    raw: Option<&str>,
+) -> Result<Value> {
+    if text.is_some() && html_text.is_some() {
+        return Err(Error::Usage("--text conflicts with --html-text".to_owned()));
+    }
+    mutation_data(raw, |data| {
+        insert_optional_string(data, "title", title);
+        insert_optional_string(data, "text", text);
+        insert_optional_string(data, "html_text", html_text);
+    })
+}
+
+fn run_project_template(
+    command: ProjectTemplateCommand,
+    client: &AsanaClient,
+    config: &Config,
+    profile: &str,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        ProjectTemplateCommand::List(args) => {
+            let path = args.team.map_or_else(
+                || "project_templates".to_owned(),
+                |gid| format!("teams/{gid}/project_templates"),
+            );
+            let mut query = Vec::new();
+            if path == "project_templates" {
+                query.push((
+                    "workspace".to_owned(),
+                    selected_workspace(config, profile, options)?,
+                ));
+            }
+            emit_raw_collection(&path, query, &args.pagination, client, options)
+        }
+        ProjectTemplateCommand::Get { gid } => {
+            emit_get(&format!("project_templates/{gid}"), client, options)
+        }
+        ProjectTemplateCommand::Delete { gid } => execute_write(
+            Method::DELETE,
+            &format!("project_templates/{gid}"),
+            Value::Object(Default::default()),
+            "project-template.delete",
+            true,
+            client,
+            options,
+        ),
+        ProjectTemplateCommand::Instantiate(args) => {
+            let data = mutation_data(args.data.as_deref(), |data| {
+                data.insert("name".to_owned(), Value::String(args.name));
+                insert_optional_string(data, "team", args.team);
+                insert_optional_bool(data, "public", args.public);
+                if !args.requested_dates.is_empty() {
+                    let dates = args
+                        .requested_dates
+                        .into_iter()
+                        .map(|(gid, value)| serde_json::json!({"gid": gid, "value": value}))
+                        .collect::<Vec<_>>();
+                    data.insert("requested_dates".to_owned(), Value::Array(dates));
+                }
+            })?;
+            execute_write(
+                Method::POST,
+                &format!("project_templates/{}/instantiateProject", args.gid),
+                data,
+                "project-template.instantiate",
+                false,
+                client,
+                options,
+            )
+        }
+    }
+}
+
+fn run_task_template(
+    command: TaskTemplateCommand,
+    client: &AsanaClient,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        TaskTemplateCommand::List(args) => emit_raw_collection(
+            "task_templates",
+            vec![("project".to_owned(), args.project)],
+            &args.pagination,
+            client,
+            options,
+        ),
+        TaskTemplateCommand::Get { gid } => {
+            emit_get(&format!("task_templates/{gid}"), client, options)
+        }
+        TaskTemplateCommand::Delete { gid } => execute_write(
+            Method::DELETE,
+            &format!("task_templates/{gid}"),
+            Value::Object(Default::default()),
+            "task-template.delete",
+            true,
+            client,
+            options,
+        ),
+        TaskTemplateCommand::Instantiate(args) => {
+            let data = mutation_data_allow_empty(args.data.as_deref(), |data| {
+                insert_optional_string(data, "name", args.name)
+            })?;
+            execute_write(
+                Method::POST,
+                &format!("task_templates/{}/instantiateTask", args.gid),
+                data,
+                "task-template.instantiate",
+                false,
+                client,
+                options,
+            )
+        }
+    }
+}
+
+fn run_user(
+    command: UserCommand,
+    client: &AsanaClient,
+    config: &Config,
+    profile: &str,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        UserCommand::List(args) => {
+            let path = if let Some(team) = args.team {
+                format!("teams/{team}/users")
+            } else {
+                let workspace = selected_workspace(config, profile, options)?;
+                format!("workspaces/{workspace}/users")
+            };
+            emit_raw_collection(&path, Vec::new(), &args.pagination, client, options)
+        }
+        UserCommand::Get(args) => {
+            let path = if args.in_workspace {
+                format!(
+                    "workspaces/{}/users/{}",
+                    selected_workspace(config, profile, options)?,
+                    args.gid
+                )
+            } else {
+                format!("users/{}", args.gid)
+            };
+            emit_get(&path, client, options)
+        }
+        UserCommand::Update(args) => {
+            let data = mutation_data(args.data.as_deref(), |data| {
+                insert_optional_string(data, "name", args.name)
+            })?;
+            let path = if args.in_workspace {
+                format!(
+                    "workspaces/{}/users/{}",
+                    selected_workspace(config, profile, options)?,
+                    args.gid
+                )
+            } else {
+                format!("users/{}", args.gid)
+            };
+            execute_write(
+                Method::PUT,
+                &path,
+                data,
+                "user.update",
+                false,
+                client,
+                options,
+            )
+        }
+        UserCommand::Favorites(args) => {
+            let workspace = selected_workspace(config, profile, options)?;
+            let query = vec![
+                ("workspace".to_owned(), workspace),
+                ("resource_type".to_owned(), args.resource_type),
+            ];
+            emit_raw_collection(
+                &format!("users/{}/favorites", args.gid),
+                query,
+                &args.pagination,
+                client,
+                options,
+            )
+        }
+    }
+}
+
+fn run_team(
+    command: TeamCommand,
+    client: &AsanaClient,
+    config: &Config,
+    profile: &str,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        TeamCommand::List(args) => {
+            let path = match args.user {
+                Some(user) => format!("users/{user}/teams"),
+                None => format!(
+                    "workspaces/{}/teams",
+                    selected_workspace(config, profile, options)?
+                ),
+            };
+            emit_raw_collection(&path, Vec::new(), &args.pagination, client, options)
+        }
+        TeamCommand::Get { gid } => emit_get(&format!("teams/{gid}"), client, options),
+        TeamCommand::Create(args) => {
+            let workspace = selected_workspace(config, profile, options)?;
+            let organization = args.organization;
+            let mut data = mutation_data(args.data.as_deref(), |data| {
+                insert_optional_string(data, "name", args.name);
+                insert_optional_string(data, "description", args.description);
+                insert_optional_string(data, "html_description", args.html_description);
+                insert_optional_string(data, "organization", organization);
+                insert_optional_string(data, "visibility", args.visibility);
+            })?;
+            if data.get("organization").is_none() {
+                data.as_object_mut()
+                    .expect("object")
+                    .insert("organization".to_owned(), Value::String(workspace));
+            }
+            execute_write(
+                Method::POST,
+                "teams",
+                data,
+                "team.create",
+                false,
+                client,
+                options,
+            )
+        }
+        TeamCommand::Update(args) => {
+            let data = mutation_data(args.data.as_deref(), |data| {
+                insert_optional_string(data, "name", args.name);
+                insert_optional_string(data, "description", args.description);
+                insert_optional_string(data, "html_description", args.html_description);
+                insert_optional_string(data, "visibility", args.visibility);
+            })?;
+            execute_write(
+                Method::PUT,
+                &format!("teams/{}", args.gid),
+                data,
+                "team.update",
+                false,
+                client,
+                options,
+            )
+        }
+        TeamCommand::UserAdd(args) => execute_write(
+            Method::POST,
+            &format!("teams/{}/addUser", args.gid),
+            keyed_value("user", Value::String(args.user)),
+            "team.user.add",
+            true,
+            client,
+            require_admin_context(options)?,
+        ),
+        TeamCommand::UserRemove(args) => execute_write(
+            Method::POST,
+            &format!("teams/{}/removeUser", args.gid),
+            keyed_value("user", Value::String(args.user)),
+            "team.user.remove",
+            true,
+            client,
+            require_admin_context(options)?,
+        ),
+    }
+}
+
+fn run_membership(
+    command: MembershipCommand,
+    client: &AsanaClient,
+    config: &Config,
+    profile: &str,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        MembershipCommand::List(args) => {
+            let mut query = Vec::new();
+            push_query(&mut query, "parent", args.parent);
+            push_query(&mut query, "member", args.member);
+            push_query(&mut query, "resource_subtype", args.resource_subtype);
+            return emit_raw_collection("memberships", query, &args.pagination, client, options);
+        }
+        MembershipCommand::Get { gid } => {
+            return emit_get(&format!("memberships/{gid}"), client, options);
+        }
+        MembershipCommand::Create(args) => {
+            let mut data = serde_json::json!({"parent": args.parent, "member": args.member});
+            insert_optional_string(
+                data.as_object_mut().expect("object"),
+                "access_level",
+                args.access_level,
+            );
+            return execute_write(
+                Method::POST,
+                "memberships",
+                data,
+                "membership.create",
+                false,
+                client,
+                options,
+            );
+        }
+        MembershipCommand::Update(args) => {
+            return execute_write(
+                Method::PUT,
+                &format!("memberships/{}", args.gid),
+                serde_json::json!({"access_level": args.access_level}),
+                "membership.update",
+                false,
+                client,
+                options,
+            );
+        }
+        MembershipCommand::Delete { gid } => {
+            return execute_write(
+                Method::DELETE,
+                &format!("memberships/{gid}"),
+                Value::Object(Default::default()),
+                "membership.delete",
+                true,
+                client,
+                options,
+            );
+        }
+        MembershipCommand::Project(_)
+        | MembershipCommand::Portfolio(_)
+        | MembershipCommand::Team(_)
+        | MembershipCommand::Workspace(_) => {}
+    }
+    let (kind, args) = match command {
+        MembershipCommand::Project(a) => ("project", a),
+        MembershipCommand::Portfolio(a) => ("portfolio", a),
+        MembershipCommand::Team(a) => ("team", a),
+        MembershipCommand::Workspace(a) => ("workspace", a),
+        _ => unreachable!("generic membership commands returned above"),
+    };
+    if let Some(gid) = args.gid {
+        return emit_get(&format!("{kind}_memberships/{gid}"), client, options);
+    }
+    let path = match (args.parent, args.user) {
+        (Some(parent), None) => format!("{}s/{parent}/{kind}_memberships", kind),
+        (None, Some(user)) if kind == "portfolio" => {
+            return emit_raw_collection(
+                "portfolio_memberships",
+                vec![
+                    (
+                        "workspace".to_owned(),
+                        selected_workspace(config, profile, options)?,
+                    ),
+                    ("user".to_owned(), user),
+                ],
+                &args.pagination,
+                client,
+                options,
+            );
+        }
+        (None, Some(user)) if matches!(kind, "team" | "workspace") => {
+            format!("users/{user}/{kind}_memberships")
+        }
+        _ => {
+            return Err(Error::Usage(format!(
+                "membership {kind} requires --gid, --parent, or a supported --user"
+            )));
+        }
+    };
+    emit_raw_collection(&path, Vec::new(), &args.pagination, client, options)
+}
+
+fn run_access_request(
+    command: AccessRequestCommand,
+    client: &AsanaClient,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        AccessRequestCommand::List(args) => emit_raw_collection(
+            "access_requests",
+            vec![("target".to_owned(), args.target)],
+            &args.pagination,
+            client,
+            options,
+        ),
+        AccessRequestCommand::Create(args) => {
+            let mut data = serde_json::json!({"target": args.target});
+            insert_optional_string(
+                data.as_object_mut().expect("object"),
+                "message",
+                args.message,
+            );
+            execute_write(
+                Method::POST,
+                "access_requests",
+                data,
+                "access-request.create",
+                false,
+                client,
+                options,
+            )
+        }
+        AccessRequestCommand::Approve { gid } => execute_action(
+            &format!("access_requests/{gid}/approve"),
+            "access-request.approve",
+            client,
+            require_admin_context(options)?,
+        ),
+        AccessRequestCommand::Reject { gid } => execute_action(
+            &format!("access_requests/{gid}/reject"),
+            "access-request.reject",
+            client,
+            require_admin_context(options)?,
+        ),
+    }
+}
+
+fn run_status_update(
+    command: StatusUpdateCommand,
+    client: &AsanaClient,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        StatusUpdateCommand::List(args) => {
+            let mut query = vec![("parent".to_owned(), args.parent)];
+            push_query(&mut query, "created_since", args.created_since);
+            emit_raw_collection("status_updates", query, &args.pagination, client, options)
+        }
+        StatusUpdateCommand::Get { gid } => {
+            emit_get(&format!("status_updates/{gid}"), client, options)
+        }
+        StatusUpdateCommand::Create(args) => {
+            if args.text.is_none() && args.html_text.is_none() && args.data.is_none() {
+                return Err(Error::Usage(
+                    "status update requires --text, --html-text, or --data".to_owned(),
+                ));
+            }
+            let data = mutation_data(args.data.as_deref(), |data| {
+                data.insert("parent".to_owned(), Value::String(args.parent));
+                data.insert("status_type".to_owned(), Value::String(args.status_type));
+                insert_optional_string(data, "title", args.title);
+                insert_optional_string(data, "text", args.text);
+                insert_optional_string(data, "html_text", args.html_text);
+            })?;
+            execute_write(
+                Method::POST,
+                "status_updates",
+                data,
+                "status-update.create",
+                false,
+                client,
+                options,
+            )
+        }
+        StatusUpdateCommand::Delete { gid } => execute_write(
+            Method::DELETE,
+            &format!("status_updates/{gid}"),
+            Value::Object(Default::default()),
+            "status-update.delete",
+            true,
+            client,
+            options,
+        ),
+    }
+}
+
+fn run_custom_field(
+    command: CustomFieldCommand,
+    client: &AsanaClient,
+    config: &Config,
+    profile: &str,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        CustomFieldCommand::List(pagination) => emit_raw_collection(
+            &format!(
+                "workspaces/{}/custom_fields",
+                selected_workspace(config, profile, options)?
+            ),
+            Vec::new(),
+            &pagination,
+            client,
+            options,
+        ),
+        CustomFieldCommand::Create(args) => {
+            let workspace = selected_workspace(config, profile, options)?;
+            let data = mutation_data(args.data.as_deref(), |data| {
+                data.insert("workspace".to_owned(), Value::String(workspace));
+                insert_optional_string(data, "name", args.name);
+                insert_optional_string(data, "resource_subtype", args.resource_subtype);
+                insert_optional_string(data, "description", args.description);
+                insert_optional_u64(data, "precision", args.precision.map(u64::from));
+                insert_optional_string(data, "format", args.format);
+                insert_optional_string(data, "currency_code", args.currency_code);
+                insert_optional_string(data, "custom_label", args.custom_label);
+                insert_optional_bool(data, "has_notifications_enabled", args.notifications);
+            })?;
+            execute_write(
+                Method::POST,
+                "custom_fields",
+                data,
+                "custom-field.create",
+                false,
+                client,
+                options,
+            )
+        }
+        CustomFieldCommand::Get { gid } => {
+            emit_get(&format!("custom_fields/{gid}"), client, options)
+        }
+        CustomFieldCommand::Update(args) => {
+            let data = mutation_data(args.data.as_deref(), |data| {
+                insert_optional_string(data, "name", args.name);
+                insert_optional_string(data, "description", args.description);
+                insert_optional_u64(data, "precision", args.precision.map(u64::from));
+                insert_optional_string(data, "format", args.format);
+                insert_optional_string(data, "currency_code", args.currency_code);
+                insert_optional_string(data, "custom_label", args.custom_label);
+                insert_optional_bool(data, "has_notifications_enabled", args.notifications);
+            })?;
+            execute_write(
+                Method::PUT,
+                &format!("custom_fields/{}", args.gid),
+                data,
+                "custom-field.update",
+                false,
+                client,
+                options,
+            )
+        }
+        CustomFieldCommand::Delete { gid } => execute_write(
+            Method::DELETE,
+            &format!("custom_fields/{gid}"),
+            Value::Object(Default::default()),
+            "custom-field.delete",
+            true,
+            client,
+            options,
+        ),
+        CustomFieldCommand::EnumOption { command } => match command {
+            EnumOptionCommand::Create(args) => {
+                let mut data = serde_json::Map::new();
+                data.insert("name".to_owned(), Value::String(args.name));
+                insert_optional_string(&mut data, "color", args.color);
+                insert_optional_string(&mut data, "insert_before", args.insert_before);
+                insert_optional_string(&mut data, "insert_after", args.insert_after);
+                execute_write(
+                    Method::POST,
+                    &format!("custom_fields/{}/enum_options", args.custom_field),
+                    Value::Object(data),
+                    "enum-option.create",
+                    false,
+                    client,
+                    options,
+                )
+            }
+            EnumOptionCommand::Update(args) => {
+                let data = mutation_data(None, |data| {
+                    insert_optional_string(data, "name", args.name);
+                    insert_optional_string(data, "color", args.color);
+                    insert_optional_bool(data, "enabled", args.enabled);
+                })?;
+                execute_write(
+                    Method::PUT,
+                    &format!("enum_options/{}", args.gid),
+                    data,
+                    "enum-option.update",
+                    false,
+                    client,
+                    options,
+                )
+            }
+            EnumOptionCommand::Move(args) => {
+                let mut data = serde_json::json!({"enum_option": args.gid});
+                let object = data.as_object_mut().expect("object");
+                insert_optional_string(object, "before_enum_option", args.before_enum_option);
+                insert_optional_string(object, "after_enum_option", args.after_enum_option);
+                execute_write(
+                    Method::POST,
+                    &format!("custom_fields/{}/enum_options/insert", args.custom_field),
+                    data,
+                    "enum-option.move",
+                    false,
+                    client,
+                    options,
+                )
+            }
+        },
+        CustomFieldCommand::Settings(args) => emit_raw_collection(
+            &format!(
+                "{}/{}/custom_field_settings",
+                args.parent_type.path(),
+                args.parent_gid
+            ),
+            Vec::new(),
+            &args.pagination,
+            client,
+            options,
+        ),
+    }
+}
+
+fn run_custom_type(
+    command: CustomTypeCommand,
+    client: &AsanaClient,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        CustomTypeCommand::List(args) => emit_raw_collection(
+            "custom_types",
+            vec![("project".to_owned(), args.project)],
+            &args.pagination,
+            client,
+            options,
+        ),
+        CustomTypeCommand::Get { gid } => emit_get(&format!("custom_types/{gid}"), client, options),
+    }
+}
+
+fn run_portfolio(
+    command: PortfolioCommand,
+    client: &AsanaClient,
+    config: &Config,
+    profile: &str,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        PortfolioCommand::List(args) => emit_raw_collection(
+            "portfolios",
+            vec![
+                (
+                    "workspace".to_owned(),
+                    selected_workspace(config, profile, options)?,
+                ),
+                ("owner".to_owned(), args.owner),
+            ],
+            &args.pagination,
+            client,
+            options,
+        ),
+        PortfolioCommand::Get { gid } => emit_get(&format!("portfolios/{gid}"), client, options),
+        PortfolioCommand::Create(args) => {
+            let workspace = selected_workspace(config, profile, options)?;
+            let data = mutation_data(args.data.as_deref(), |data| {
+                data.insert("workspace".to_owned(), Value::String(workspace));
+                insert_optional_string(data, "name", args.name);
+                insert_optional_string(data, "color", args.color);
+                insert_optional_string(data, "start_on", args.start_on);
+                insert_optional_string(data, "due_on", args.due_on);
+                insert_optional_string(data, "privacy_setting", args.privacy_setting);
+            })?;
+            execute_write(
+                Method::POST,
+                "portfolios",
+                data,
+                "portfolio.create",
+                false,
+                client,
+                options,
+            )
+        }
+        PortfolioCommand::Update(args) => {
+            if (args.start_on.is_some() || args.clear_start)
+                && args.due_on.is_none()
+                && !args.clear_due
+            {
+                return Err(Error::Usage(
+                    "portfolio start date changes require --due-on or --clear-due".to_owned(),
+                ));
+            }
+            let data = mutation_data(args.data.as_deref(), |data| {
+                insert_optional_string(data, "name", args.name);
+                insert_optional_string(data, "color", args.color);
+                insert_optional_string(data, "start_on", args.start_on);
+                insert_optional_string(data, "due_on", args.due_on);
+                if args.clear_start {
+                    data.insert("start_on".to_owned(), Value::Null);
+                }
+                if args.clear_due {
+                    data.insert("due_on".to_owned(), Value::Null);
+                }
+                if args.archive {
+                    data.insert("archived".to_owned(), Value::Bool(true));
+                }
+                if args.unarchive {
+                    data.insert("archived".to_owned(), Value::Bool(false));
+                }
+                insert_custom_field_values(data, args.custom_fields);
+            })?;
+            execute_write(
+                Method::PUT,
+                &format!("portfolios/{}", args.gid),
+                data,
+                "portfolio.update",
+                false,
+                client,
+                options,
+            )
+        }
+        PortfolioCommand::Delete { gid } => execute_write(
+            Method::DELETE,
+            &format!("portfolios/{gid}"),
+            Value::Object(Default::default()),
+            "portfolio.delete",
+            true,
+            client,
+            options,
+        ),
+        PortfolioCommand::Duplicate(args) => {
+            let data = mutation_data(args.data.as_deref(), |data| {
+                data.insert("name".to_owned(), Value::String(args.name));
+                if !args.include.is_empty() {
+                    data.insert("include".to_owned(), Value::String(args.include.join(",")));
+                }
+            })?;
+            execute_write(
+                Method::POST,
+                &format!("portfolios/{}/duplicate", args.gid),
+                data,
+                "portfolio.duplicate",
+                false,
+                client,
+                options,
+            )
+        }
+        PortfolioCommand::Item(args) => {
+            if let Some(item) = args.add {
+                let mut data = serde_json::json!({"item": item});
+                let object = data.as_object_mut().expect("object");
+                insert_optional_string(object, "insert_before", args.insert_before);
+                insert_optional_string(object, "insert_after", args.insert_after);
+                execute_write(
+                    Method::POST,
+                    &format!("portfolios/{}/addItem", args.gid),
+                    data,
+                    "portfolio.item.add",
+                    false,
+                    client,
+                    options,
+                )
+            } else if let Some(item) = args.remove {
+                execute_write(
+                    Method::POST,
+                    &format!("portfolios/{}/removeItem", args.gid),
+                    keyed_value("item", Value::String(item)),
+                    "portfolio.item.remove",
+                    true,
+                    client,
+                    options,
+                )
+            } else {
+                emit_raw_collection(
+                    &format!("portfolios/{}/items", args.gid),
+                    Vec::new(),
+                    &args.pagination,
+                    client,
+                    options,
+                )
+            }
+        }
+        PortfolioCommand::Member(args) => {
+            let (verb, members, destructive) = if args.remove.is_empty() {
+                ("addMembers", args.add, false)
+            } else {
+                ("removeMembers", args.remove, true)
+            };
+            execute_write(
+                Method::POST,
+                &format!("portfolios/{}/{verb}", args.gid),
+                keyed_value("members", serde_json::json!(members)),
+                "portfolio.member",
+                destructive,
+                client,
+                options,
+            )
+        }
+        PortfolioCommand::CustomField(args) => {
+            run_strategic_custom_field("portfolios", args, client, options)
+        }
+        PortfolioCommand::CustomFields { gid, pagination } => emit_raw_collection(
+            &format!("portfolios/{gid}/custom_field_settings"),
+            Vec::new(),
+            &pagination,
+            client,
+            options,
+        ),
+    }
+}
+
+fn run_goal(
+    command: GoalCommand,
+    client: &AsanaClient,
+    config: &Config,
+    profile: &str,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        GoalCommand::List(args) => {
+            let mut query = vec![(
+                "workspace".to_owned(),
+                selected_workspace(config, profile, options)?,
+            )];
+            push_query(&mut query, "portfolio", args.portfolio);
+            push_query(&mut query, "project", args.project);
+            push_query(&mut query, "task", args.task);
+            push_query(&mut query, "team", args.team);
+            push_query(
+                &mut query,
+                "is_workspace_level",
+                args.workspace_level.map(|v| v.to_string()),
+            );
+            if !args.time_periods.is_empty() {
+                query.push(("time_periods".to_owned(), args.time_periods.join(",")));
+            }
+            emit_raw_collection("goals", query, &args.pagination, client, options)
+        }
+        GoalCommand::Get { gid } => emit_get(&format!("goals/{gid}"), client, options),
+        GoalCommand::Create(args) => {
+            let workspace = selected_workspace(config, profile, options)?;
+            let data = mutation_data(args.data.as_deref(), |data| {
+                data.insert("workspace".to_owned(), Value::String(workspace));
+                insert_optional_string(data, "name", args.name);
+                insert_optional_string(data, "owner", args.owner);
+                insert_optional_string(data, "team", args.team);
+                insert_optional_string(data, "time_period", args.time_period);
+                insert_optional_string(data, "due_on", args.due_on);
+                insert_optional_string(data, "start_on", args.start_on);
+                insert_optional_string(data, "notes", args.notes);
+                insert_optional_string(data, "html_notes", args.html_notes);
+                insert_optional_bool(data, "is_workspace_level", args.workspace_level);
+                if !args.followers.is_empty() {
+                    data.insert("followers".to_owned(), serde_json::json!(args.followers));
+                }
+            })?;
+            execute_write(
+                Method::POST,
+                "goals",
+                data,
+                "goal.create",
+                false,
+                client,
+                options,
+            )
+        }
+        GoalCommand::Update(args) => {
+            let data = mutation_data(args.data.as_deref(), |data| {
+                insert_optional_string(data, "name", args.name);
+                insert_optional_string(data, "owner", args.owner);
+                insert_optional_string(data, "team", args.team);
+                insert_optional_string(data, "time_period", args.time_period);
+                insert_optional_string(data, "due_on", args.due_on);
+                insert_optional_string(data, "start_on", args.start_on);
+                insert_optional_string(data, "notes", args.notes);
+                insert_optional_string(data, "html_notes", args.html_notes);
+                insert_optional_string(data, "status", args.status);
+                if args.clear_owner {
+                    data.insert("owner".to_owned(), Value::Null);
+                }
+                if args.clear_team {
+                    data.insert("team".to_owned(), Value::Null);
+                }
+                if args.clear_time_period {
+                    data.insert("time_period".to_owned(), Value::Null);
+                }
+                if args.clear_due {
+                    data.insert("due_on".to_owned(), Value::Null);
+                }
+                if args.clear_start {
+                    data.insert("start_on".to_owned(), Value::Null);
+                }
+                if args.clear_notes {
+                    data.insert("notes".to_owned(), Value::String(String::new()));
+                }
+                insert_custom_field_values(data, args.custom_fields);
+            })?;
+            execute_write(
+                Method::PUT,
+                &format!("goals/{}", args.gid),
+                data,
+                "goal.update",
+                false,
+                client,
+                options,
+            )
+        }
+        GoalCommand::Delete { gid } => execute_write(
+            Method::DELETE,
+            &format!("goals/{gid}"),
+            Value::Object(Default::default()),
+            "goal.delete",
+            true,
+            client,
+            options,
+        ),
+        GoalCommand::Metric { command } => match command {
+            GoalMetricCommand::Set(args) => {
+                let data = mutation_data(args.data.as_deref(), |object| {
+                    insert_optional_string(object, "unit", args.unit);
+                    insert_optional_number(object, "initial_number_value", args.initial);
+                    insert_optional_number(object, "target_number_value", args.target);
+                    insert_optional_number(object, "current_number_value", args.current);
+                    insert_optional_u64(object, "precision", args.precision.map(u64::from));
+                    insert_optional_string(object, "currency_code", args.currency_code);
+                    insert_optional_string(object, "progress_source", args.progress_source);
+                })?;
+                execute_write(
+                    Method::POST,
+                    &format!("goals/{}/setMetric", args.gid),
+                    data,
+                    "goal.metric.set",
+                    false,
+                    client,
+                    options,
+                )
+            }
+            GoalMetricCommand::Update(args) => execute_write(
+                Method::POST,
+                &format!("goals/{}/setMetricCurrentValue", args.gid),
+                serde_json::json!({"current_number_value": args.current}),
+                "goal.metric.update",
+                false,
+                client,
+                options,
+            ),
+        },
+        GoalCommand::Follower(args) => {
+            let (verb, followers, destructive) = if args.remove.is_empty() {
+                ("addFollowers", args.add, false)
+            } else {
+                ("removeFollowers", args.remove, true)
+            };
+            execute_write(
+                Method::POST,
+                &format!("goals/{}/{verb}", args.gid),
+                keyed_value("followers", serde_json::json!(followers)),
+                "goal.follower",
+                destructive,
+                client,
+                options,
+            )
+        }
+        GoalCommand::Parents { gid, pagination } => emit_raw_collection(
+            &format!("goals/{gid}/parentGoals"),
+            Vec::new(),
+            &pagination,
+            client,
+            options,
+        ),
+        GoalCommand::CustomField(args) => {
+            run_strategic_custom_field("goals", args, client, options)
+        }
+        GoalCommand::CustomFields { gid, pagination } => emit_raw_collection(
+            &format!("goals/{gid}/custom_field_settings"),
+            Vec::new(),
+            &pagination,
+            client,
+            options,
+        ),
+    }
+}
+
+fn run_strategic_custom_field(
+    parent_path: &str,
+    args: StrategicCustomFieldArgs,
+    client: &AsanaClient,
+    options: &GlobalOptions,
+) -> Result<()> {
+    let (endpoint, data, destructive) = if args.remove {
+        (
+            "removeCustomFieldSetting",
+            keyed_value("custom_field", Value::String(args.custom_field)),
+            true,
+        )
+    } else {
+        (
+            "addCustomFieldSetting",
+            serde_json::json!({"custom_field": args.custom_field, "is_important": args.important}),
+            false,
+        )
+    };
+    execute_write(
+        Method::POST,
+        &format!("{parent_path}/{}/{endpoint}", args.gid),
+        data,
+        "custom-field.setting",
+        destructive,
+        client,
+        options,
+    )
+}
+
+fn run_goal_relationship(
+    command: GoalRelationshipCommand,
+    client: &AsanaClient,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        GoalRelationshipCommand::List(args) => {
+            let mut query = vec![("supported_goal".to_owned(), args.supported_goal)];
+            push_query(&mut query, "resource_subtype", args.resource_subtype);
+            emit_raw_collection(
+                "goal_relationships",
+                query,
+                &args.pagination,
+                client,
+                options,
+            )
+        }
+        GoalRelationshipCommand::Get { gid } => {
+            emit_get(&format!("goal_relationships/{gid}"), client, options)
+        }
+        GoalRelationshipCommand::Add(args) => {
+            let mut data = serde_json::json!({"supporting_resource": args.supporting_resource});
+            let object = data.as_object_mut().expect("object");
+            insert_optional_number(object, "contribution_weight", args.contribution_weight);
+            insert_optional_string(object, "insert_before", args.insert_before);
+            insert_optional_string(object, "insert_after", args.insert_after);
+            execute_write(
+                Method::POST,
+                &format!("goals/{}/addSupportingRelationship", args.goal),
+                data,
+                "goal-relationship.add",
+                false,
+                client,
+                options,
+            )
+        }
+        GoalRelationshipCommand::Update(args) => execute_write(
+            Method::PUT,
+            &format!("goal_relationships/{}", args.gid),
+            serde_json::json!({"contribution_weight": args.contribution_weight}),
+            "goal-relationship.update",
+            false,
+            client,
+            options,
+        ),
+        GoalRelationshipCommand::Remove(args) => execute_write(
+            Method::POST,
+            &format!("goals/{}/removeSupportingRelationship", args.goal),
+            serde_json::json!({"supporting_resource": args.supporting_resource}),
+            "goal-relationship.remove",
+            true,
+            client,
+            options,
+        ),
+    }
+}
+
+fn run_project_portfolio_setting(
+    command: ProjectPortfolioSettingCommand,
+    client: &AsanaClient,
+    options: &GlobalOptions,
+) -> Result<()> {
+    match command {
+        ProjectPortfolioSettingCommand::List(args) => {
+            let path = match (args.project, args.portfolio) {
+                (Some(gid), None) => format!("projects/{gid}/project_portfolio_settings"),
+                (None, Some(gid)) => format!("portfolios/{gid}/project_portfolio_settings"),
+                _ => unreachable!("clap enforces one project portfolio setting parent"),
+            };
+            emit_raw_collection(&path, Vec::new(), &args.pagination, client, options)
+        }
+        ProjectPortfolioSettingCommand::Get { gid } => emit_get(
+            &format!("project_portfolio_settings/{gid}"),
+            client,
+            options,
+        ),
+        ProjectPortfolioSettingCommand::Update(args) => execute_write(
+            Method::PUT,
+            &format!("project_portfolio_settings/{}", args.gid),
+            serde_json::json!({"is_access_control_inherited": args.inherit_access}),
+            "project-portfolio-setting.update",
+            false,
+            client,
+            options,
+        ),
     }
 }
 
@@ -535,7 +1915,7 @@ fn run_task(
             let mut data = serde_json::Map::new();
             insert_optional_string(&mut data, "name", args.name);
             if !args.include.is_empty() {
-                data.insert("include".to_owned(), serde_json::json!(args.include));
+                data.insert("include".to_owned(), Value::String(args.include.join(",")));
             }
             execute_write(
                 Method::POST,
@@ -1099,6 +2479,93 @@ fn emit_raw_read(value: Value, options: &GlobalOptions) -> Result<()> {
     emit_value(&normalize_raw(value), options.json)
 }
 
+fn emit_get(path: &str, client: &AsanaClient, options: &GlobalOptions) -> Result<()> {
+    emit_raw_read(client.raw_json(Method::GET, path, &[], None)?, options)
+}
+
+fn selected_workspace(config: &Config, profile: &str, options: &GlobalOptions) -> Result<String> {
+    config::require_workspace(options.workspace_override.as_deref(), config, profile)
+}
+
+fn push_query(query: &mut Vec<(String, String)>, key: &str, value: Option<String>) {
+    if let Some(value) = value {
+        query.push((key.to_owned(), value));
+    }
+}
+
+fn insert_optional_bool(data: &mut serde_json::Map<String, Value>, key: &str, value: Option<bool>) {
+    if let Some(value) = value {
+        data.insert(key.to_owned(), Value::Bool(value));
+    }
+}
+
+fn insert_optional_number(
+    data: &mut serde_json::Map<String, Value>,
+    key: &str,
+    value: Option<f64>,
+) {
+    if let Some(value) = value.and_then(serde_json::Number::from_f64) {
+        data.insert(key.to_owned(), Value::Number(value));
+    }
+}
+
+fn insert_optional_u64(data: &mut serde_json::Map<String, Value>, key: &str, value: Option<u64>) {
+    if let Some(value) = value {
+        data.insert(key.to_owned(), Value::Number(value.into()));
+    }
+}
+
+fn insert_custom_field_values(
+    data: &mut serde_json::Map<String, Value>,
+    values: Vec<(String, Value)>,
+) {
+    if !values.is_empty() {
+        data.insert(
+            "custom_fields".to_owned(),
+            Value::Object(values.into_iter().collect()),
+        );
+    }
+}
+
+fn mutation_data<F>(raw: Option<&str>, fill: F) -> Result<Value>
+where
+    F: FnOnce(&mut serde_json::Map<String, Value>),
+{
+    let mut typed = serde_json::Map::new();
+    fill(&mut typed);
+    let mut value = Value::Object(typed);
+    if let Some(raw) = raw {
+        input::merge_objects(&mut value, input::read_json(raw)?)?;
+    }
+    if value.as_object().is_some_and(serde_json::Map::is_empty) {
+        return Err(Error::Usage(
+            "at least one mutation field is required".to_owned(),
+        ));
+    }
+    Ok(value)
+}
+
+fn mutation_data_allow_empty<F>(raw: Option<&str>, fill: F) -> Result<Value>
+where
+    F: FnOnce(&mut serde_json::Map<String, Value>),
+{
+    let mut value = Value::Object(Default::default());
+    fill(value.as_object_mut().expect("object"));
+    if let Some(raw) = raw {
+        input::merge_objects(&mut value, input::read_json(raw)?)?;
+    }
+    Ok(value)
+}
+
+fn require_admin_context(options: &GlobalOptions) -> Result<&GlobalOptions> {
+    if options.profile_override.is_none() || options.workspace_override.is_none() {
+        return Err(Error::Usage(
+            "high-impact administration requires explicit --profile and --workspace".to_owned(),
+        ));
+    }
+    Ok(options)
+}
+
 fn execute_write(
     method: Method,
     path: &str,
@@ -1148,6 +2615,39 @@ fn execute_write(
     emit_value(&value, options.json)
 }
 
+fn execute_action(
+    path: &str,
+    operation: &str,
+    client: &AsanaClient,
+    options: &GlobalOptions,
+) -> Result<()> {
+    if options.dry_run {
+        return emit_preview(
+            &MutationPreview {
+                dry_run: true,
+                method: "POST",
+                path,
+                query: &[],
+                data: None,
+                risk: "destructive",
+                confirmation_required: true,
+            },
+            options.json,
+        );
+    }
+    safety::require_destructive_confirmation(
+        options.yes,
+        &format!("Execute {operation} on {path}"),
+    )?;
+    let value = normalize_raw(client.raw_json(Method::POST, path, &[], None)?);
+    let value = if value == serde_json::json!({}) {
+        serde_json::json!({"ok": true, "operation": operation, "path": path})
+    } else {
+        value
+    };
+    emit_value(&value, options.json)
+}
+
 fn insert_optional_string(
     data: &mut serde_json::Map<String, Value>,
     key: &str,
@@ -1178,13 +2678,79 @@ fn command_is_mutation(command: &Command) -> bool {
             !matches!(command, StoryCommand::Get { .. } | StoryCommand::List(_))
         }
         Command::Api { command } => !matches!(command, ApiCommand::Get(_)),
+        Command::Workspace { command } => matches!(
+            command,
+            WorkspaceCommand::Update(_)
+                | WorkspaceCommand::UserAdd(_)
+                | WorkspaceCommand::UserRemove(_)
+        ),
+        Command::Project { command } => !matches!(
+            command,
+            ProjectCommand::List(_)
+                | ProjectCommand::Search(_)
+                | ProjectCommand::Get { .. }
+                | ProjectCommand::TaskCounts { .. }
+                | ProjectCommand::CustomFields { .. }
+                | ProjectCommand::Brief {
+                    command: ProjectBriefCommand::Get { .. }
+                }
+        ),
+        Command::ProjectTemplate { command } => !matches!(
+            command,
+            ProjectTemplateCommand::List(_) | ProjectTemplateCommand::Get { .. }
+        ),
+        Command::TaskTemplate { command } => !matches!(
+            command,
+            TaskTemplateCommand::List(_) | TaskTemplateCommand::Get { .. }
+        ),
+        Command::User { command } => matches!(command, UserCommand::Update(_)),
+        Command::Team { command } => {
+            !matches!(command, TeamCommand::List(_) | TeamCommand::Get { .. })
+        }
+        Command::AccessRequest { command } => !matches!(command, AccessRequestCommand::List(_)),
+        Command::StatusUpdate { command } => !matches!(
+            command,
+            StatusUpdateCommand::List(_) | StatusUpdateCommand::Get { .. }
+        ),
+        Command::CustomField { command } => !matches!(
+            command,
+            CustomFieldCommand::List(_)
+                | CustomFieldCommand::Get { .. }
+                | CustomFieldCommand::Settings(_)
+        ),
+        Command::CustomType { .. } => false,
+        Command::Portfolio { command } => match command {
+            PortfolioCommand::List(_)
+            | PortfolioCommand::Get { .. }
+            | PortfolioCommand::CustomFields { .. } => false,
+            PortfolioCommand::Item(args) => args.add.is_some() || args.remove.is_some(),
+            _ => true,
+        },
+        Command::Goal { command } => !matches!(
+            command,
+            GoalCommand::List(_)
+                | GoalCommand::Get { .. }
+                | GoalCommand::Parents { .. }
+                | GoalCommand::CustomFields { .. }
+        ),
+        Command::GoalRelationship { command } => !matches!(
+            command,
+            GoalRelationshipCommand::List(_) | GoalRelationshipCommand::Get { .. }
+        ),
+        Command::ProjectPortfolioSetting { command } => {
+            matches!(command, ProjectPortfolioSettingCommand::Update(_))
+        }
         Command::Auth { .. }
-        | Command::Workspace { .. }
-        | Command::Project { .. }
         | Command::Profile { .. }
         | Command::Job { .. }
         | Command::Typeahead(_)
         | Command::Reaction(_) => false,
+        Command::Membership { command } => matches!(
+            command,
+            MembershipCommand::Create(_)
+                | MembershipCommand::Update(_)
+                | MembershipCommand::Delete { .. }
+        ),
         Command::UserTaskList { .. } => false,
     }
 }

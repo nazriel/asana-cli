@@ -6,7 +6,7 @@ api_baseline = "2026-07-11"
 [[resources]]
 name = "access_requests"
 prefixes = ["access_requests"]
-status = "raw"
+status = "typed"
 
 [[resources]]
 name = "agents_and_ai_studio"
@@ -30,8 +30,8 @@ status = "raw"
 
 [[resources]]
 name = "custom_fields_and_types"
-prefixes = ["custom_fields", "custom_field_settings", "custom_types"]
-status = "raw"
+prefixes = ["custom_fields", "custom_field_settings", "custom_types", "enum_options"]
+status = "typed"
 
 [[resources]]
 name = "exports"
@@ -41,7 +41,7 @@ status = "raw"
 [[resources]]
 name = "goals"
 prefixes = ["goals", "goal_relationships"]
-status = "raw"
+status = "typed"
 
 [[resources]]
 name = "jobs"
@@ -51,7 +51,7 @@ status = "typed"
 [[resources]]
 name = "memberships"
 prefixes = ["memberships", "portfolio_memberships", "project_memberships", "team_memberships", "workspace_memberships"]
-status = "raw"
+status = "typed"
 
 [[resources]]
 name = "ooo_entries"
@@ -61,12 +61,13 @@ status = "raw"
 [[resources]]
 name = "portfolios"
 prefixes = ["portfolios"]
-status = "raw"
+status = "typed"
 
 [[resources]]
 name = "projects"
 prefixes = ["projects", "project_briefs", "project_portfolio_settings", "project_statuses", "project_templates"]
 status = "partial_typed"
+note = "Project CRUD/search/relationships/briefs/counts/templates and project portfolio settings are typed. Deprecated project statuses remain raw in favor of typed status_updates."
 
 [[resources]]
 name = "reactions"
@@ -86,7 +87,7 @@ status = "typed"
 [[resources]]
 name = "status_updates"
 prefixes = ["status_updates"]
-status = "raw"
+status = "typed"
 
 [[resources]]
 name = "stories"
@@ -106,12 +107,13 @@ status = "typed"
 [[resources]]
 name = "task_templates"
 prefixes = ["task_templates"]
-status = "raw"
+status = "typed"
 
 [[resources]]
 name = "teams_users_workspaces"
 prefixes = ["teams", "users", "workspaces"]
 status = "partial_typed"
+note = "Phase 2 people, favorites, teams, workspace update, and user add/remove operations are typed. Workspace events remain scheduled for Phase 5."
 
 [[resources]]
 name = "time"

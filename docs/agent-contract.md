@@ -47,6 +47,19 @@ This document is the stable integration surface for an AI skill or a script usin
 | Add/remove task tag | `asana task tag add\|remove <task-gid> <tag-gid> --json` |
 | Upload/delete attachment | `asana attachment upload\|delete ... --json` |
 | Resolve object by name | `asana typeahead <type> <query> --json` |
+| Search/create/update/delete project | `asana project search\|create\|update\|delete ... --json` |
+| Read/create/update/delete project brief | `asana project brief get\|create\|update\|delete ... --json` |
+| Read/create/delete status update | `asana status-update list\|get\|create\|delete ... --json` |
+| List/instantiate templates | `asana project-template\|task-template list\|instantiate ... --json` |
+| Read users, teams, and favorites | `asana user\|team list\|get ... --json` |
+| Manage general memberships | `asana membership list\|get\|create\|update\|delete ... --json` |
+| Request or decide access | `asana access-request list\|create\|approve\|reject ... --json` |
+| Manage custom-field schema/options | `asana custom-field list\|get\|create\|update\|delete\|enum-option ... --json` |
+| Inspect custom types | `asana custom-type list\|get ... --json` |
+| Manage portfolios/items/members | `asana portfolio list\|get\|create\|update\|delete\|item\|member ... --json` |
+| Manage goals and metrics | `asana goal list\|get\|create\|update\|delete\|metric ... --json` |
+| Manage goal supporting work | `asana goal-relationship list\|get\|add\|update\|remove ... --json` |
+| Inspect/update project–portfolio settings | `asana project-portfolio-setting list\|get\|update ... --json` |
 
 Every command accepts `--workspace <workspace-gid>` as a one-command override when the command needs a workspace.
 
@@ -138,4 +151,8 @@ Errors are JSON on stderr when `--json` is active and never contaminate stdout:
 - JSON passed to raw POST/PUT is the inner `data` object; the CLI creates the Asana envelope.
 - Typed task updates are patches: pass only requested changes. Use `--expect-modified-at` from a direct prior `task get` when available.
 - Typed destructive commands require interactive confirmation or `--yes`; agents use `--yes` only for explicitly authorized changes.
+- Team/workspace user changes and access-request decisions require explicit `--profile` and `--workspace` in addition to `--yes` when destructive.
+- Project/template duplication and instantiation return async jobs; use `job wait` before relying on the created resource.
+- Portfolio duplication also returns an async job. Goal metric and supporting-relationship writes are synchronous.
+- Encode custom-field values as JSON and use `null` only for an intentional clear after inspecting the field schema.
 - Verify mutations through direct resource or relationship reads. Task search is eventually consistent.

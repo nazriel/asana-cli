@@ -1,6 +1,6 @@
 ---
 name: asana-cli
-description: Read, investigate, and safely modify Asana through the `asana` CLI, including typed task/project queries and guarded raw REST API calls. Use when a user asks to find, inspect, summarize, compare, retrieve, create, update, or delete Asana information, or when another workflow needs Asana context. Prefer typed commands; use raw API writes only from explicit user intent and with the exact official endpoint contract.
+description: Read, investigate, and safely modify Asana through the `asana` CLI, including tasks, projects, people, custom fields, portfolios, goals, and guarded raw REST API calls. Use when a user asks to find, inspect, summarize, compare, retrieve, create, update, or delete Asana information, or when another workflow needs Asana context. Prefer typed commands; use raw API writes only from explicit user intent and with the exact official endpoint contract.
 ---
 
 # Use Asana CLI
@@ -48,6 +48,10 @@ Read [references/command-reference.md](references/command-reference.md) before u
 Read [references/raw-api.md](references/raw-api.md) before any raw API mutation. It defines request envelopes, dry-run, confirmations, profiles, and ambiguous outcomes.
 
 Read [references/mutate-work.md](references/mutate-work.md) before creating, updating, moving, relating, commenting on, or deleting daily work. Use its typed commands instead of raw API calls.
+
+Read [references/projects-and-people.md](references/projects-and-people.md) before administering projects, briefs, status updates, templates, users, teams, memberships, workspaces, or access requests. It defines explicit-context and confirmation rules for access-changing operations.
+
+Read [references/custom-fields.md](references/custom-fields.md) before changing custom-field schemas, options, settings, custom types, or values. Read [references/strategic-work.md](references/strategic-work.md) for portfolios, goals, metrics, supporting relationships, and project–portfolio settings.
 
 ## Investigate tasks
 

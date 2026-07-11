@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Opt-in live smoke test for Phase 2. Run only against a dedicated Asana sandbox.
+# Every deleted resource is first created by this process and carries RUN_ID.
+
+: "${ASANA_SMOKE_PROFILE:?set ASANA_SMOKE_PROFILE to a locally authenticated sandbox profile}"
+: "${ASANA_SMOKE_WORKSPACE:?set ASANA_SMOKE_WORKSPACE to a dedicated sandbox workspace GID}"
+: "${ASANA_SMOKE_TEAM:?set ASANA_SMOKE_TEAM to a team in that sandbox}"
+
+if [[ "${ASANA_SMOKE_CONFIRM:-}" != "phase2-sandbox" ]]; then
+  echo "Refusing live writes: set ASANA_SMOKE_CONFIRM=phase2-sandbox" >&2
+  exit 2
+fi
+
+ASANA_BIN="${ASANA_BIN:-asana}"
+RUN_ID="phase2-smoke-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+BASE=("$ASANA_BIN" --json --profile "$ASANA_SMOKE_PROFILE" --workspace "$ASANA_SMOKE_WORKSPACE")
+
+command -v "$ASANA_BIN" >/dev/null || { echo "Asana CLI not found: $ASANA_BIN" >&2; exit 2; }
+command -v jq >/dev/null || { echo "jq is required for the live smoke suite" >&2; exit 2; }
+
+project_gid=""
+brief_gid=""
+status_gid=""
+membership_gid=""
+duplicate_gid=""
+template_gid=""
+instantiated_gid=""
+task_gid=""
+
+run() {
+  "${BASE[@]}" "$@"
+}
+
+run_yes() {
+  "${BASE[@]}" --yes "$@"
+}
+
+cleanup() {
+  set +e
+  [[ -z "$membership_gid" ]] || run_yes membership delete "$membership_gid" >/dev/null
+  [[ -z "$status_gid" ]] || run_yes status-update delete "$status_gid" >/dev/null
+  [[ -z "$brief_gid" ]] || run_yes project brief delete "$brief_gid" >/dev/null
+  [[ -z "$task_gid" ]] || run_yes task delete "$task_gid" >/dev/null
+  [[ -z "$instantiated_gid" ]] || run_yes project delete "$instantiated_gid" >/dev/null
+  [[ -z "$duplicate_gid" ]] || run_yes project delete "$duplicate_gid" >/dev/null
+  [[ -z "$template_gid" ]] || run_yes project-template delete "$template_gid" >/dev/null
+  [[ -z "$project_gid" ]] || run_yes project delete "$project_gid" >/dev/null
+}
+trap cleanup EXIT
+
+run auth status >/dev/null
+run workspace get "$ASANA_SMOKE_WORKSPACE" >/dev/null
+run team get "$ASANA_SMOKE_TEAM" >/dev/null
+run team list >/dev/null
+run user list --team "$ASANA_SMOKE_TEAM" >/dev/null
+run membership team --parent "$ASANA_SMOKE_TEAM" >/dev/null
+run membership workspace --parent "$ASANA_SMOKE_WORKSPACE" >/dev/null
+
+project_gid="$(run project create --team "$ASANA_SMOKE_TEAM" --name "$RUN_ID" | jq -er .gid)"
+run project get "$project_gid" >/dev/null
+run project update "$project_gid" --notes "Created by $RUN_ID" >/dev/null
+run project task-counts "$project_gid" >/dev/null
+run project custom-fields "$project_gid" >/dev/null
+
+brief_gid="$(run project brief create --project "$project_gid" --title "$RUN_ID brief" --text "Live Phase 2 smoke test" | jq -er .gid)"
+run project brief get "$project_gid" >/dev/null
+run project brief update "$brief_gid" --title "$RUN_ID brief updated" >/dev/null
+
+status_gid="$(run status-update create --parent "$project_gid" --status-type on_track --text "$RUN_ID is running" | jq -er .gid)"
+run status-update get "$status_gid" >/dev/null
+run status-update list --parent "$project_gid" >/dev/null
+
+if [[ -n "${ASANA_SMOKE_MEMBER:-}" ]]; then
+  membership_gid="$(run membership create --parent "$project_gid" --member "$ASANA_SMOKE_MEMBER" --access-level editor | jq -er .gid)"
+  run membership get "$membership_gid" >/dev/null
+  run membership update "$membership_gid" --access-level commenter >/dev/null
+  run membership list --parent "$project_gid" >/dev/null
+fi
+
+duplicate_job="$(run project duplicate "$project_gid" --name "$RUN_ID duplicate" | jq -er .gid)"
+duplicate_gid="$(run job wait "$duplicate_job" --timeout 10m | jq -er .new_project.gid)"
+
+template_job="$(run project save-as-template "$project_gid" --name "$RUN_ID template" --team "$ASANA_SMOKE_TEAM" --private | jq -er .gid)"
+template_gid="$(run job wait "$template_job" --timeout 10m | jq -er .new_project_template.gid)"
+run project-template get "$template_gid" >/dev/null
+run project-template list --team "$ASANA_SMOKE_TEAM" >/dev/null
+
+instantiate_job="$(run project-template instantiate "$template_gid" --name "$RUN_ID instantiated" | jq -er .gid)"
+instantiated_gid="$(run job wait "$instantiate_job" --timeout 10m | jq -er .new_project.gid)"
+
+if [[ -n "${ASANA_SMOKE_TASK_TEMPLATE:-}" ]]; then
+  run task-template get "$ASANA_SMOKE_TASK_TEMPLATE" >/dev/null
+  run task-template list --project "$project_gid" >/dev/null
+  task_job="$(run task-template instantiate "$ASANA_SMOKE_TASK_TEMPLATE" --name "$RUN_ID task" | jq -er .gid)"
+  task_gid="$(run job wait "$task_job" --timeout 10m | jq -er .new_task.gid)"
+fi
+
+jq -n \
+  --arg run_id "$RUN_ID" \
+  --arg project_gid "$project_gid" \
+  --arg duplicate_gid "$duplicate_gid" \
+  --arg template_gid "$template_gid" \
+  --arg instantiated_gid "$instantiated_gid" \
+  '{ok:true, run_id:$run_id, created:{project:$project_gid, duplicate:$duplicate_gid, template:$template_gid, instantiated_project:$instantiated_gid}, cleanup:"registered"}'

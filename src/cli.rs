@@ -75,6 +75,71 @@ pub enum Command {
         #[command(subcommand)]
         command: ProjectCommand,
     },
+    /// Work with project and task templates.
+    ProjectTemplate {
+        #[command(subcommand)]
+        command: ProjectTemplateCommand,
+    },
+    /// Work with reusable task templates.
+    TaskTemplate {
+        #[command(subcommand)]
+        command: TaskTemplateCommand,
+    },
+    /// Read and manage Asana users.
+    User {
+        #[command(subcommand)]
+        command: UserCommand,
+    },
+    /// Read and manage Asana teams.
+    Team {
+        #[command(subcommand)]
+        command: TeamCommand,
+    },
+    /// Inspect project, team, and workspace memberships.
+    Membership {
+        #[command(subcommand)]
+        command: MembershipCommand,
+    },
+    /// Request and decide access to Asana resources.
+    AccessRequest {
+        #[command(subcommand)]
+        command: AccessRequestCommand,
+    },
+    /// Read, create, and delete status updates.
+    StatusUpdate {
+        #[command(subcommand)]
+        command: StatusUpdateCommand,
+    },
+    /// Manage custom-field schemas, options, and settings.
+    CustomField {
+        #[command(subcommand)]
+        command: CustomFieldCommand,
+    },
+    /// Inspect workspace custom types.
+    CustomType {
+        #[command(subcommand)]
+        command: CustomTypeCommand,
+    },
+    /// Manage portfolios and their relationships.
+    Portfolio {
+        #[command(subcommand)]
+        command: PortfolioCommand,
+    },
+    /// Manage goals, metrics, followers, and custom fields.
+    Goal {
+        #[command(subcommand)]
+        command: GoalCommand,
+    },
+    /// Inspect and update supporting-work relationships for goals.
+    GoalRelationship {
+        #[command(subcommand)]
+        command: GoalRelationshipCommand,
+    },
+    /// Inspect and update project placement inside portfolios.
+    ProjectPortfolioSetting {
+        #[command(subcommand)]
+        command: ProjectPortfolioSettingCommand,
+    },
     /// Read sections in a project.
     Section {
         #[command(subcommand)]
@@ -242,12 +307,986 @@ pub enum WorkspaceCommand {
         /// Workspace or organization GID.
         gid: String,
     },
+    /// Get one workspace.
+    Get { gid: String },
+    /// Rename a workspace.
+    Update(WorkspaceUpdateArgs),
+    /// Add a user to a workspace by email.
+    UserAdd(WorkspaceUserArgs),
+    /// Remove a user from a workspace.
+    UserRemove(WorkspaceUserArgs),
 }
 
 #[derive(Debug, Subcommand)]
 pub enum ProjectCommand {
     /// List projects in the selected workspace.
     List(ProjectListArgs),
+    /// Search projects in the selected workspace.
+    Search(ProjectSearchArgs),
+    /// Get one project.
+    Get { gid: String },
+    /// Create a project in a workspace or team.
+    Create(ProjectCreateArgs),
+    /// Patch a project.
+    Update(ProjectUpdateArgs),
+    /// Delete a project.
+    Delete { gid: String },
+    /// Duplicate a project asynchronously.
+    Duplicate(ProjectDuplicateArgs),
+    /// Get task-count metadata for a project.
+    TaskCounts { gid: String },
+    /// Add or remove project members.
+    Member(ProjectRelationArgs),
+    /// Add or remove project followers.
+    Follower(ProjectRelationArgs),
+    /// Attach or remove a project custom field.
+    CustomField(ProjectCustomFieldArgs),
+    /// List custom-field settings attached to a project.
+    CustomFields {
+        gid: String,
+        #[command(flatten)]
+        pagination: PaginationArgs,
+    },
+    /// Work with the project brief.
+    Brief {
+        #[command(subcommand)]
+        command: ProjectBriefCommand,
+    },
+    /// Save a project as an asynchronous template job.
+    SaveAsTemplate(ProjectSaveTemplateArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct WorkspaceUpdateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct WorkspaceUserArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub user: String,
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectSearchArgs {
+    pub text: String,
+    #[arg(long)]
+    pub team: Option<String>,
+    #[arg(long)]
+    pub completed: Option<bool>,
+    /// Additional verified API query parameter as KEY=VALUE.
+    #[arg(long = "filter", value_parser = crate::input::parse_key_value)]
+    pub filters: Vec<(String, String)>,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectCreateArgs {
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long)]
+    pub team: Option<String>,
+    #[arg(long)]
+    pub owner: Option<String>,
+    #[arg(long)]
+    pub notes: Option<String>,
+    #[arg(long)]
+    pub color: Option<String>,
+    #[arg(long)]
+    pub default_view: Option<String>,
+    #[arg(long)]
+    pub public: Option<bool>,
+    #[arg(long)]
+    pub archived: Option<bool>,
+    #[arg(long = "custom-field", value_parser = crate::input::parse_json_assignment)]
+    pub custom_fields: Vec<(String, serde_json::Value)>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectUpdateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long)]
+    pub owner: Option<String>,
+    #[arg(long)]
+    pub notes: Option<String>,
+    #[arg(long)]
+    pub color: Option<String>,
+    #[arg(long)]
+    pub default_view: Option<String>,
+    #[arg(long)]
+    pub public: Option<bool>,
+    #[arg(long, conflicts_with = "unarchive")]
+    pub archive: bool,
+    #[arg(long, conflicts_with = "archive")]
+    pub unarchive: bool,
+    #[arg(long = "custom-field", value_parser = crate::input::parse_json_assignment)]
+    pub custom_fields: Vec<(String, serde_json::Value)>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectDuplicateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub name: String,
+    #[arg(long = "include")]
+    pub include: Vec<String>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectRelationArgs {
+    pub gid: String,
+    #[arg(long, value_delimiter = ',', required_unless_present = "remove")]
+    pub add: Vec<String>,
+    #[arg(long, value_delimiter = ',', conflicts_with = "add")]
+    pub remove: Vec<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectCustomFieldArgs {
+    pub gid: String,
+    pub custom_field: String,
+    #[arg(long, conflicts_with = "remove")]
+    pub important: bool,
+    #[arg(long)]
+    pub remove: bool,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ProjectBriefCommand {
+    Get { project: String },
+    Create(ProjectBriefCreateArgs),
+    Update(ProjectBriefUpdateArgs),
+    Delete { gid: String },
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectBriefCreateArgs {
+    #[arg(long)]
+    pub project: String,
+    #[arg(long)]
+    pub title: Option<String>,
+    #[arg(long, conflicts_with = "html_text")]
+    pub text: Option<String>,
+    #[arg(long, conflicts_with = "text")]
+    pub html_text: Option<String>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectBriefUpdateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub title: Option<String>,
+    #[arg(long, conflicts_with = "html_text")]
+    pub text: Option<String>,
+    #[arg(long, conflicts_with = "text")]
+    pub html_text: Option<String>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectSaveTemplateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub name: String,
+    #[arg(long)]
+    pub team: Option<String>,
+    #[arg(long, conflicts_with = "private", required_unless_present = "private")]
+    pub public: bool,
+    #[arg(long, conflicts_with = "public")]
+    pub private: bool,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ProjectTemplateCommand {
+    List(ProjectTemplateListArgs),
+    Get { gid: String },
+    Delete { gid: String },
+    Instantiate(ProjectTemplateInstantiateArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectTemplateListArgs {
+    #[arg(long)]
+    pub team: Option<String>,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectTemplateInstantiateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub name: String,
+    #[arg(long)]
+    pub team: Option<String>,
+    #[arg(long)]
+    pub public: Option<bool>,
+    #[arg(long = "requested-date", value_parser = parse_gid_date)]
+    pub requested_dates: Vec<(String, String)>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TaskTemplateCommand {
+    List(TaskTemplateListArgs),
+    Get { gid: String },
+    Delete { gid: String },
+    Instantiate(TaskTemplateInstantiateArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct TaskTemplateListArgs {
+    #[arg(long)]
+    pub project: String,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct TaskTemplateInstantiateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum UserCommand {
+    List(UserListArgs),
+    Get(UserGetArgs),
+    Update(UserUpdateArgs),
+    Favorites(UserFavoritesArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct UserGetArgs {
+    pub gid: String,
+    /// Use the workspace-scoped user endpoint.
+    #[arg(long)]
+    pub in_workspace: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct UserListArgs {
+    #[arg(long)]
+    pub team: Option<String>,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct UserUpdateArgs {
+    pub gid: String,
+    /// Update workspace-scoped user fields such as custom fields.
+    #[arg(long)]
+    pub in_workspace: bool,
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct UserFavoritesArgs {
+    pub gid: String,
+    #[arg(long)]
+    #[arg(long, default_value = "project")]
+    pub resource_type: String,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TeamCommand {
+    List(TeamListArgs),
+    Get { gid: String },
+    Create(TeamCreateArgs),
+    Update(TeamUpdateArgs),
+    UserAdd(TeamUserArgs),
+    UserRemove(TeamUserArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct TeamListArgs {
+    #[arg(long)]
+    pub user: Option<String>,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct TeamCreateArgs {
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long, conflicts_with = "html_description")]
+    pub description: Option<String>,
+    #[arg(long, conflicts_with = "description")]
+    pub html_description: Option<String>,
+    #[arg(long)]
+    pub organization: Option<String>,
+    #[arg(long)]
+    pub visibility: Option<String>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct TeamUpdateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long, conflicts_with = "html_description")]
+    pub description: Option<String>,
+    #[arg(long, conflicts_with = "description")]
+    pub html_description: Option<String>,
+    #[arg(long)]
+    pub visibility: Option<String>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct TeamUserArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub user: String,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MembershipCommand {
+    List(GenericMembershipListArgs),
+    Get { gid: String },
+    Create(GenericMembershipCreateArgs),
+    Update(GenericMembershipUpdateArgs),
+    Delete { gid: String },
+    Project(MembershipListArgs),
+    Portfolio(MembershipListArgs),
+    Team(MembershipListArgs),
+    Workspace(MembershipListArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct GenericMembershipListArgs {
+    #[arg(long)]
+    pub parent: Option<String>,
+    #[arg(long)]
+    pub member: Option<String>,
+    #[arg(long)]
+    pub resource_subtype: Option<String>,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct GenericMembershipCreateArgs {
+    #[arg(long)]
+    pub parent: String,
+    #[arg(long)]
+    pub member: String,
+    #[arg(long)]
+    pub access_level: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct GenericMembershipUpdateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub access_level: String,
+}
+
+#[derive(Debug, Args)]
+pub struct MembershipListArgs {
+    #[arg(long)]
+    pub gid: Option<String>,
+    #[arg(long, conflicts_with = "user")]
+    pub parent: Option<String>,
+    #[arg(long, conflicts_with = "parent")]
+    pub user: Option<String>,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AccessRequestCommand {
+    List(AccessRequestListArgs),
+    Create(AccessRequestCreateArgs),
+    Approve { gid: String },
+    Reject { gid: String },
+}
+
+#[derive(Debug, Args)]
+pub struct AccessRequestListArgs {
+    #[arg(long)]
+    pub target: String,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct AccessRequestCreateArgs {
+    #[arg(long)]
+    pub target: String,
+    #[arg(long)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum StatusUpdateCommand {
+    List(StatusUpdateListArgs),
+    Get { gid: String },
+    Create(StatusUpdateCreateArgs),
+    Delete { gid: String },
+}
+
+#[derive(Debug, Args)]
+pub struct StatusUpdateListArgs {
+    #[arg(long)]
+    pub parent: String,
+    #[arg(long, value_parser = parse_datetime)]
+    pub created_since: Option<String>,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct StatusUpdateCreateArgs {
+    #[arg(long)]
+    pub parent: String,
+    #[arg(long)]
+    pub status_type: String,
+    #[arg(long)]
+    pub title: Option<String>,
+    #[arg(long, conflicts_with = "html_text")]
+    pub text: Option<String>,
+    #[arg(long, conflicts_with = "text")]
+    pub html_text: Option<String>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CustomFieldCommand {
+    List(PaginationArgs),
+    Create(CustomFieldCreateArgs),
+    Get {
+        gid: String,
+    },
+    Update(CustomFieldUpdateArgs),
+    Delete {
+        gid: String,
+    },
+    EnumOption {
+        #[command(subcommand)]
+        command: EnumOptionCommand,
+    },
+    Settings(CustomFieldSettingsArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct CustomFieldCreateArgs {
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long = "type")]
+    pub resource_subtype: Option<String>,
+    #[arg(long)]
+    pub description: Option<String>,
+    #[arg(long, value_parser = clap::value_parser!(u8).range(0..=6))]
+    pub precision: Option<u8>,
+    #[arg(long)]
+    pub format: Option<String>,
+    #[arg(long)]
+    pub currency_code: Option<String>,
+    #[arg(long)]
+    pub custom_label: Option<String>,
+    #[arg(long)]
+    pub notifications: Option<bool>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct CustomFieldUpdateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long)]
+    pub description: Option<String>,
+    #[arg(long, value_parser = clap::value_parser!(u8).range(0..=6))]
+    pub precision: Option<u8>,
+    #[arg(long)]
+    pub format: Option<String>,
+    #[arg(long)]
+    pub currency_code: Option<String>,
+    #[arg(long)]
+    pub custom_label: Option<String>,
+    #[arg(long)]
+    pub notifications: Option<bool>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum EnumOptionCommand {
+    Create(EnumOptionCreateArgs),
+    Update(EnumOptionUpdateArgs),
+    Move(EnumOptionMoveArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct EnumOptionCreateArgs {
+    #[arg(long)]
+    pub custom_field: String,
+    #[arg(long)]
+    pub name: String,
+    #[arg(long)]
+    pub color: Option<String>,
+    #[arg(long, conflicts_with = "insert_after")]
+    pub insert_before: Option<String>,
+    #[arg(long, conflicts_with = "insert_before")]
+    pub insert_after: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct EnumOptionUpdateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long)]
+    pub color: Option<String>,
+    #[arg(long)]
+    pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Args)]
+pub struct EnumOptionMoveArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub custom_field: String,
+    #[arg(
+        long,
+        conflicts_with = "after_enum_option",
+        required_unless_present = "after_enum_option"
+    )]
+    pub before_enum_option: Option<String>,
+    #[arg(long, conflicts_with = "before_enum_option")]
+    pub after_enum_option: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct CustomFieldSettingsArgs {
+    #[arg(value_enum)]
+    pub parent_type: StrategicParentType,
+    pub parent_gid: String,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum StrategicParentType {
+    Project,
+    Portfolio,
+    Goal,
+    Team,
+}
+
+impl StrategicParentType {
+    pub fn path(self) -> &'static str {
+        match self {
+            Self::Project => "projects",
+            Self::Portfolio => "portfolios",
+            Self::Goal => "goals",
+            Self::Team => "teams",
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CustomTypeCommand {
+    List(CustomTypeListArgs),
+    Get { gid: String },
+}
+
+#[derive(Debug, Args)]
+pub struct CustomTypeListArgs {
+    #[arg(long)]
+    pub project: String,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PortfolioCommand {
+    List(PortfolioListArgs),
+    Get {
+        gid: String,
+    },
+    Create(PortfolioCreateArgs),
+    Update(PortfolioUpdateArgs),
+    Delete {
+        gid: String,
+    },
+    Duplicate(PortfolioDuplicateArgs),
+    Item(PortfolioItemArgs),
+    Member(PortfolioMemberArgs),
+    CustomField(StrategicCustomFieldArgs),
+    CustomFields {
+        gid: String,
+        #[command(flatten)]
+        pagination: PaginationArgs,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct PortfolioListArgs {
+    #[arg(long, default_value = "me")]
+    pub owner: String,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct PortfolioCreateArgs {
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long)]
+    pub color: Option<String>,
+    #[arg(long, value_parser = parse_date)]
+    pub start_on: Option<String>,
+    #[arg(long, value_parser = parse_date)]
+    pub due_on: Option<String>,
+    #[arg(long)]
+    pub privacy_setting: Option<String>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct PortfolioUpdateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long)]
+    pub color: Option<String>,
+    #[arg(long, value_parser = parse_date, conflicts_with = "clear_start")]
+    pub start_on: Option<String>,
+    #[arg(long, value_parser = parse_date, conflicts_with = "clear_due")]
+    pub due_on: Option<String>,
+    #[arg(long, conflicts_with = "start_on")]
+    pub clear_start: bool,
+    #[arg(long, conflicts_with = "due_on")]
+    pub clear_due: bool,
+    #[arg(long, conflicts_with = "unarchive")]
+    pub archive: bool,
+    #[arg(long, conflicts_with = "archive")]
+    pub unarchive: bool,
+    #[arg(long = "custom-field", value_parser = crate::input::parse_json_assignment)]
+    pub custom_fields: Vec<(String, serde_json::Value)>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct PortfolioDuplicateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub name: String,
+    #[arg(long)]
+    pub include: Vec<String>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct PortfolioItemArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub add: Option<String>,
+    #[arg(long, conflicts_with = "add")]
+    pub remove: Option<String>,
+    #[arg(long, conflicts_with = "insert_after", requires = "add")]
+    pub insert_before: Option<String>,
+    #[arg(long, conflicts_with = "insert_before", requires = "add")]
+    pub insert_after: Option<String>,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct PortfolioMemberArgs {
+    pub gid: String,
+    #[arg(long, value_delimiter = ',', required_unless_present = "remove")]
+    pub add: Vec<String>,
+    #[arg(long, value_delimiter = ',', conflicts_with = "add")]
+    pub remove: Vec<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct StrategicCustomFieldArgs {
+    pub gid: String,
+    pub custom_field: String,
+    #[arg(long, conflicts_with = "important")]
+    pub remove: bool,
+    #[arg(long, conflicts_with = "remove")]
+    pub important: bool,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum GoalCommand {
+    List(GoalListArgs),
+    Get {
+        gid: String,
+    },
+    Create(GoalCreateArgs),
+    Update(GoalUpdateArgs),
+    Delete {
+        gid: String,
+    },
+    Metric {
+        #[command(subcommand)]
+        command: GoalMetricCommand,
+    },
+    Follower(GoalFollowerArgs),
+    Parents {
+        gid: String,
+        #[command(flatten)]
+        pagination: PaginationArgs,
+    },
+    CustomField(StrategicCustomFieldArgs),
+    CustomFields {
+        gid: String,
+        #[command(flatten)]
+        pagination: PaginationArgs,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct GoalListArgs {
+    #[arg(long)]
+    pub portfolio: Option<String>,
+    #[arg(long)]
+    pub project: Option<String>,
+    #[arg(long)]
+    pub task: Option<String>,
+    #[arg(long)]
+    pub team: Option<String>,
+    #[arg(long)]
+    pub workspace_level: Option<bool>,
+    #[arg(long, value_delimiter = ',')]
+    pub time_periods: Vec<String>,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct GoalCreateArgs {
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long)]
+    pub owner: Option<String>,
+    #[arg(long)]
+    pub team: Option<String>,
+    #[arg(long)]
+    pub time_period: Option<String>,
+    #[arg(long, value_parser = parse_date)]
+    pub due_on: Option<String>,
+    #[arg(long, value_parser = parse_date)]
+    pub start_on: Option<String>,
+    #[arg(long, conflicts_with = "html_notes")]
+    pub notes: Option<String>,
+    #[arg(long, conflicts_with = "notes")]
+    pub html_notes: Option<String>,
+    #[arg(long)]
+    pub workspace_level: Option<bool>,
+    #[arg(long = "follower")]
+    pub followers: Vec<String>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct GoalUpdateArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub name: Option<String>,
+    #[arg(long, conflicts_with = "clear_owner")]
+    pub owner: Option<String>,
+    #[arg(long, conflicts_with = "clear_team")]
+    pub team: Option<String>,
+    #[arg(long, conflicts_with = "clear_time_period")]
+    pub time_period: Option<String>,
+    #[arg(long, value_parser = parse_date, conflicts_with = "clear_due")]
+    pub due_on: Option<String>,
+    #[arg(long, value_parser = parse_date, conflicts_with = "clear_start")]
+    pub start_on: Option<String>,
+    #[arg(long, conflicts_with_all = ["html_notes", "clear_notes"])]
+    pub notes: Option<String>,
+    #[arg(long, conflicts_with_all = ["notes", "clear_notes"])]
+    pub html_notes: Option<String>,
+    #[arg(long)]
+    pub clear_owner: bool,
+    #[arg(long)]
+    pub clear_team: bool,
+    #[arg(long)]
+    pub clear_time_period: bool,
+    #[arg(long)]
+    pub clear_due: bool,
+    #[arg(long)]
+    pub clear_start: bool,
+    #[arg(long, conflicts_with_all = ["notes", "html_notes"])]
+    pub clear_notes: bool,
+    #[arg(long)]
+    pub status: Option<String>,
+    #[arg(long = "custom-field", value_parser = crate::input::parse_json_assignment)]
+    pub custom_fields: Vec<(String, serde_json::Value)>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum GoalMetricCommand {
+    Set(GoalMetricSetArgs),
+    Update(GoalMetricUpdateArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct GoalMetricSetArgs {
+    pub gid: String,
+    #[arg(long)]
+    pub unit: Option<String>,
+    #[arg(long, value_parser = parse_finite_number)]
+    pub initial: Option<f64>,
+    #[arg(long, value_parser = parse_finite_number)]
+    pub target: Option<f64>,
+    #[arg(long, value_parser = parse_finite_number)]
+    pub current: Option<f64>,
+    #[arg(long)]
+    #[arg(value_parser = clap::value_parser!(u8).range(0..=6))]
+    pub precision: Option<u8>,
+    #[arg(long)]
+    pub currency_code: Option<String>,
+    #[arg(long)]
+    pub progress_source: Option<String>,
+    #[arg(long, value_name = "JSON|@FILE|-")]
+    pub data: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct GoalMetricUpdateArgs {
+    pub gid: String,
+    #[arg(long, value_parser = parse_finite_number)]
+    pub current: f64,
+}
+
+#[derive(Debug, Args)]
+pub struct GoalFollowerArgs {
+    pub gid: String,
+    #[arg(long, value_delimiter = ',', required_unless_present = "remove")]
+    pub add: Vec<String>,
+    #[arg(long, value_delimiter = ',', conflicts_with = "add")]
+    pub remove: Vec<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum GoalRelationshipCommand {
+    List(GoalRelationshipListArgs),
+    Get { gid: String },
+    Add(GoalRelationshipAddArgs),
+    Update(GoalRelationshipUpdateArgs),
+    Remove(GoalRelationshipRemoveArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct GoalRelationshipListArgs {
+    #[arg(long)]
+    pub supported_goal: String,
+    #[arg(long)]
+    pub resource_subtype: Option<String>,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct GoalRelationshipAddArgs {
+    #[arg(long)]
+    pub goal: String,
+    #[arg(long)]
+    pub supporting_resource: String,
+    #[arg(long)]
+    #[arg(value_parser = parse_contribution)]
+    pub contribution_weight: Option<f64>,
+    #[arg(long, conflicts_with = "insert_after")]
+    pub insert_before: Option<String>,
+    #[arg(long, conflicts_with = "insert_before")]
+    pub insert_after: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct GoalRelationshipUpdateArgs {
+    pub gid: String,
+    #[arg(long)]
+    #[arg(value_parser = parse_contribution)]
+    pub contribution_weight: f64,
+}
+
+#[derive(Debug, Args)]
+pub struct GoalRelationshipRemoveArgs {
+    #[arg(long)]
+    pub goal: String,
+    #[arg(long)]
+    pub supporting_resource: String,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ProjectPortfolioSettingCommand {
+    List(ProjectPortfolioSettingListArgs),
+    Get { gid: String },
+    Update(ProjectPortfolioSettingUpdateArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectPortfolioSettingListArgs {
+    #[arg(
+        long,
+        conflicts_with = "portfolio",
+        required_unless_present = "portfolio"
+    )]
+    pub project: Option<String>,
+    #[arg(long, conflicts_with = "project")]
+    pub portfolio: Option<String>,
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectPortfolioSettingUpdateArgs {
+    pub gid: String,
+    #[arg(
+        long,
+        conflicts_with = "no_inherit_access",
+        required_unless_present = "no_inherit_access"
+    )]
+    pub inherit_access: bool,
+    #[arg(long, conflicts_with = "inherit_access")]
+    pub no_inherit_access: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -327,6 +1366,14 @@ pub struct SectionTaskAddArgs {
 
 #[derive(Debug, Args)]
 pub struct ProjectListArgs {
+    /// List projects for this team instead of the selected workspace.
+    #[arg(long, conflicts_with = "task")]
+    pub team: Option<String>,
+
+    /// List projects containing this task.
+    #[arg(long, conflicts_with = "team")]
+    pub task: Option<String>,
+
     /// Return only archived projects.
     #[arg(long, conflicts_with = "all_projects")]
     pub archived: bool,
@@ -1072,6 +2119,34 @@ fn parse_datetime(value: &str) -> Result<String, String> {
         .map_err(|_| {
             "date-time must use RFC 3339 format, for example 2026-07-11T12:30:00Z".to_owned()
         })
+}
+
+fn parse_gid_date(value: &str) -> Result<(String, String), String> {
+    let (gid, date) = crate::input::parse_key_value(value)?;
+    parse_date(&date)?;
+    Ok((gid, date))
+}
+
+fn parse_contribution(value: &str) -> Result<f64, String> {
+    let value = value
+        .parse::<f64>()
+        .map_err(|_| "contribution weight must be a number from 0 through 1".to_owned())?;
+    if (0.0..=1.0).contains(&value) {
+        Ok(value)
+    } else {
+        Err("contribution weight must be a number from 0 through 1".to_owned())
+    }
+}
+
+fn parse_finite_number(value: &str) -> Result<f64, String> {
+    let value = value
+        .parse::<f64>()
+        .map_err(|_| "value must be a finite number".to_owned())?;
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err("value must be a finite number".to_owned())
+    }
 }
 
 fn parse_duration(value: &str) -> Result<Duration, String> {

@@ -2,7 +2,7 @@
 
 `asana-cli` is an agent-friendly command-line client for the [Asana REST API](https://developers.asana.com/docs/quick-start). It combines ergonomic typed read commands with a guarded raw API interface and predictable JSON on stdout.
 
-Typed commands cover daily task workflows: task CRUD, comments, tags, attachments, sections, subtasks, dependencies, followers, and project placement. `asana api` provides guarded access to the remaining REST API while later resource families are added.
+Typed commands cover daily work, project administration, people, custom-field schemas and values, portfolios, goals, memberships, and access requests. `asana api` provides guarded access to the remaining REST API while later resource families are added.
 
 ## Build
 
@@ -80,6 +80,25 @@ asana task comment add 111 --text "Fixed and ready for review"
 # Preview and confirm destructive changes
 asana --json --dry-run task delete 111
 asana --yes task delete 111
+
+# Projects, people, and templates
+asana --workspace 123 project search "Mobile"
+asana --workspace 123 project create --name "Mobile launch" --team 456
+asana project brief create --project 789 --title "Context" --text "Launch brief"
+asana status-update create --parent 789 --status-type on_track --text "On schedule"
+asana --workspace 123 project-template list --team 456
+asana project-template instantiate 987 --name "Q4 launch"
+asana user list --team 456
+asana --workspace 123 team list
+asana membership list --parent 789
+
+# Custom data and strategic work
+asana --workspace 123 custom-field list
+asana --workspace 123 custom-field create --name "Impact" --type number --precision 0
+asana --workspace 123 portfolio create --name "Company strategy"
+asana --workspace 123 goal create --name "Increase activation" --owner me
+asana goal metric set 456 --unit percentage --initial 0 --target 1 --current 0.25
+asana goal-relationship add --goal 456 --supporting-resource 789 --contribution-weight 0.5
 ```
 
 ## JSON and pagination
@@ -103,7 +122,13 @@ JSON data always goes to stdout. Errors and `--verbose` diagnostics go to stderr
 
 The repository includes an agent skill in [`skills/asana-cli`](skills/asana-cli). Install or link that directory in your agent's skill location to teach it how to query Asana safely through this CLI, handle pagination and errors, and retrieve attachments without exposing credentials.
 
-The proposed roadmap from the current MVP to full public REST API coverage is documented in [`docs/full-api-parity-plan.md`](docs/full-api-parity-plan.md).
+The completed four-phase personal-use scope and explicitly unplanned enterprise/infrastructure families are documented in [`docs/full-api-parity-plan.md`](docs/full-api-parity-plan.md).
+
+Additive command and safety changes in the projects/people/templates release are summarized in [`docs/phase-2-migration.md`](docs/phase-2-migration.md).
+
+Local evidence and the opt-in developer-sandbox smoke procedure are documented in [`docs/phase-2-verification.md`](docs/phase-2-verification.md).
+
+Phase 3 custom-data and strategic-work additions are summarized in [`docs/phase-3-migration.md`](docs/phase-3-migration.md).
 
 ## Raw REST API
 
@@ -134,4 +159,4 @@ Attachment URLs are refreshed immediately before each download. Downloads stream
 
 ## Scope
 
-The CLI currently uses Asana personal access tokens and process-level token overrides. Typed daily-work mutations and custom-field task search are available. OAuth, typed strategic/admin resources, parameter-level manifest coverage, and caching remain future work.
+The CLI currently uses Asana personal access tokens and process-level token overrides. Typed daily-work, project, people, custom-field, portfolio, goal, membership, and access-request workflows are available. OAuth, enterprise resource management, drift automation, and caching remain future work.

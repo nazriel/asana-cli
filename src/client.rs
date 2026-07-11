@@ -475,7 +475,9 @@ impl AsanaClient {
             .fields
             .as_deref()
             .map(|fields| format!("{fields},status"))
-            .unwrap_or_else(|| "gid,status,new_task,new_project,new_portfolio,new_project_template,new_task_template".to_owned());
+            .unwrap_or_else(|| {
+                "gid,status,new_task,new_project,new_portfolio,new_project_template".to_owned()
+            });
         Ok(self
             .get_json(&format!("jobs/{gid}"), &[("opt_fields".to_owned(), fields)])?
             .data)

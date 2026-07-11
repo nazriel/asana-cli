@@ -1,9 +1,12 @@
-use clap::{Parser, error::ErrorKind};
+use clap::{FromArgMatches, error::ErrorKind};
 
 use asana_cli::{app, cli::Cli, output};
 
 fn main() {
-    let cli = match Cli::try_parse() {
+    let cli = match Cli::command_sorted()
+        .try_get_matches()
+        .and_then(|matches| Cli::from_arg_matches(&matches))
+    {
         Ok(cli) => cli,
         Err(error) => {
             if matches!(

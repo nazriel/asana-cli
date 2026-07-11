@@ -11,3 +11,4 @@ pub mod models;
 pub mod output;
 pub mod parity;
 pub mod safety;
+pub mod setup;

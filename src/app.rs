@@ -15,6 +15,7 @@ use crate::{
     models::{ApiResponse, AuthStatus, Collection, ProfileStatus, TaskWithRelations},
     output, parity,
     safety::{self, MutationPreview},
+    setup,
 };
 
 struct GlobalOptions {
@@ -32,6 +33,10 @@ struct GlobalOptions {
 }
 
 pub fn run(cli: Cli) -> Result<()> {
+    if let Command::Setup(args) = &cli.command {
+        return setup::run(args.shell, cli.json);
+    }
+
     let options = GlobalOptions {
         json: cli.json,
         profile_override: cli.profile,
@@ -403,7 +408,7 @@ fn run_with_client(
         },
         Command::Api { command } => run_api(command, client, options),
         Command::Job { command } => run_job(command, client, options),
-        Command::Auth { .. } | Command::Profile { .. } => {
+        Command::Auth { .. } | Command::Profile { .. } | Command::Setup(_) => {
             unreachable!("commands handled before authentication")
         }
     }
@@ -2743,6 +2748,7 @@ fn command_is_mutation(command: &Command) -> bool {
         Command::Auth { .. }
         | Command::Profile { .. }
         | Command::Job { .. }
+        | Command::Setup(_)
         | Command::Typeahead(_)
         | Command::Reaction(_) => false,
         Command::Membership { command } => matches!(

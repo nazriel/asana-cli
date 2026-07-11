@@ -11,6 +11,24 @@ cargo build --release
 ./target/release/asana --help
 ```
 
+## Shell completion
+
+Install completion for the current shell in the standard per-user XDG directory:
+
+```bash
+asana setup
+```
+
+The shell is detected from `$SHELL`. It can also be selected explicitly:
+
+```bash
+asana setup --shell bash
+asana setup --shell zsh
+asana setup --shell fish
+```
+
+The command does not modify `.bashrc`, `.zshrc`, or other shell startup files. It prints the installed path and any activation step that may still be required. Run it again after upgrading `asana-cli` to refresh completion for newly added commands and options. See [shell completion](docs/shell-completion.md) for paths and activation details.
+
 ## Authenticate
 
 Create a personal access token in the Asana developer console, then store it in the operating-system keyring:

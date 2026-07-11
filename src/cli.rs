@@ -1,6 +1,6 @@
 use std::{path::PathBuf, time::Duration};
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -189,6 +189,35 @@ pub enum Command {
         #[command(subcommand)]
         command: JobCommand,
     },
+    /// Install shell completion for the current user.
+    Setup(SetupArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SetupArgs {
+    /// Shell for which completion should be installed. Inferred from $SHELL when omitted.
+    #[arg(long, value_enum)]
+    pub shell: Option<CompletionShell>,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum CompletionShell {
+    Bash,
+    Fish,
+    Zsh,
+}
+
+impl Cli {
+    /// Build the Clap command with every subcommand group sorted alphabetically.
+    pub fn command_sorted() -> clap::Command {
+        let mut command = Self::command();
+        command.build();
+        sort_subcommands(command)
+    }
+}
+
+fn sort_subcommands(command: clap::Command) -> clap::Command {
+    command.mut_subcommands(|subcommand| sort_subcommands(subcommand).display_order(0))
 }
 
 #[derive(Debug, Subcommand)]

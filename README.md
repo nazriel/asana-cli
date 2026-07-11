@@ -46,6 +46,10 @@ asana task list
 # Tasks in a project, including completed ones
 asana task list --project 123456789 --include-completed
 
+# Discover sections and list open tasks in one section
+asana section list --project 123456789
+asana task list --section 987654321
+
 # Search task names and descriptions
 asana task search "quarterly planning" --assignee me --due-before 2026-09-01
 

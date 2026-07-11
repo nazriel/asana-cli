@@ -4,7 +4,7 @@ use crate::{
     download::{DownloadSummary, DownloadedAttachment},
     error::{Error, Result},
     models::{
-        Attachment, AuthStatus, Collection, Project, Story, Task, TaskWithRelations, User,
+        Attachment, AuthStatus, Collection, Project, Section, Story, Task, TaskWithRelations, User,
         Workspace,
     },
 };
@@ -93,6 +93,23 @@ pub fn print_projects(collection: &Collection<Project>) {
                 .and_then(|owner| owner.name.as_deref())
                 .unwrap_or(""),
             compact(project.name.as_deref().unwrap_or(""))
+        );
+    }
+    print_next_offset(collection.next_offset.as_deref());
+}
+
+pub fn print_sections(collection: &Collection<Section>) {
+    println!("GID\tPROJECT\tNAME");
+    for section in &collection.data {
+        println!(
+            "{}\t{}\t{}",
+            section.gid,
+            section
+                .project
+                .as_ref()
+                .and_then(|project| project.name.as_deref())
+                .unwrap_or(""),
+            compact(section.name.as_deref().unwrap_or(""))
         );
     }
     print_next_offset(collection.next_offset.as_deref());

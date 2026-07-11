@@ -17,7 +17,9 @@ This document is the stable integration surface for an AI skill or a script usin
 | Find accessible workspaces | `asana workspace list --json` |
 | Select a persistent default workspace | `asana workspace use <gid> --json` |
 | List projects | `asana project list --json` |
+| List sections in a project | `asana section list --project <project-gid> --json` |
 | List the user's open tasks | `asana task list --json` |
+| List open tasks in a section | `asana task list --section <section-gid> --json` |
 | Search task title and description | `asana task search <query> --json` |
 | Read a task description | `asana task get <task-gid> --json` |
 | Read task plus comments/files | `asana task get <task-gid> --comments --attachments --json` |
@@ -103,7 +105,8 @@ Errors are JSON on stderr when `--json` is active and never contaminate stdout:
 ## Operational notes
 
 - List commands default to 50 items; use `--limit` from 1 through 100.
-- `task list` without `--project` means the authenticated user's open tasks in the selected workspace.
+- `task list` without `--project` or `--section` means the authenticated user's open tasks in the selected workspace.
+- `task list --section <gid>` uses Asana's section endpoint directly. Discover section GIDs with `section list --project <gid>`; do not fetch every task merely to inspect `memberships`.
 - `task search` has no `--offset`: Asana says its search ordering is not stable. Limit it to the smallest useful result set.
 - Comments are stories whose `resource_subtype` is `comment_added`; system activity is excluded.
 - Attachment filenames supplied by Asana are sanitized. Existing destination files are never overwritten.

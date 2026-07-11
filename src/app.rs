@@ -1,8 +1,8 @@
 use crate::{
     auth,
     cli::{
-        AttachmentCommand, AuthCommand, Cli, Command, PaginationArgs, ProjectCommand, TaskCommand,
-        TaskSearchArgs, WorkspaceCommand,
+        AttachmentCommand, AuthCommand, Cli, Command, PaginationArgs, ProjectCommand,
+        SectionCommand, TaskCommand, TaskSearchArgs, WorkspaceCommand,
     },
     client::{AsanaClient, Page, TaskSearchOptions},
     config::{self, Config},
@@ -127,6 +127,19 @@ fn run_authenticated(
                 }
             }
         },
+        Command::Section { command } => match command {
+            SectionCommand::List(args) => {
+                let collection = Collection::from_response(
+                    client.list_sections(&args.project, &page(&args.pagination))?,
+                );
+                if json {
+                    output::emit_json(&collection)
+                } else {
+                    output::print_sections(&collection);
+                    Ok(())
+                }
+            }
+        },
         Command::Task { command } => run_task(
             command,
             &client,
@@ -148,12 +161,13 @@ fn run_task(
 ) -> Result<()> {
     match command {
         TaskCommand::List(args) => {
-            let needs_workspace = args.project.is_none() || args.assignee.is_some();
+            let needs_workspace =
+                (args.project.is_none() && args.section.is_none()) || args.assignee.is_some();
             let workspace_gid = needs_workspace
                 .then(|| config::require_workspace(workspace_override, config))
                 .transpose()?;
             let assignee = args.assignee.as_deref().or_else(|| {
-                if args.project.is_none() {
+                if args.project.is_none() && args.section.is_none() {
                     Some("me")
                 } else {
                     None
@@ -162,6 +176,7 @@ fn run_task(
             let collection = Collection::from_response(client.list_tasks(
                 workspace_gid.as_deref(),
                 args.project.as_deref(),
+                args.section.as_deref(),
                 assignee,
                 args.include_completed,
                 &page(&args.pagination),

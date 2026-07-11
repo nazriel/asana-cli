@@ -41,6 +41,11 @@ pub enum Command {
         #[command(subcommand)]
         command: ProjectCommand,
     },
+    /// Read sections in a project.
+    Section {
+        #[command(subcommand)]
+        command: SectionCommand,
+    },
     /// Read and search tasks.
     Task {
         #[command(subcommand)]
@@ -80,6 +85,22 @@ pub enum ProjectCommand {
     List(ProjectListArgs),
 }
 
+#[derive(Debug, Subcommand)]
+pub enum SectionCommand {
+    /// List sections in a project.
+    List(SectionListArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SectionListArgs {
+    /// Project GID.
+    #[arg(long, value_name = "GID")]
+    pub project: String,
+
+    #[command(flatten)]
+    pub pagination: PaginationArgs,
+}
+
 #[derive(Debug, Args)]
 pub struct ProjectListArgs {
     /// Return only archived projects.
@@ -112,8 +133,12 @@ pub struct TaskListArgs {
     #[arg(long)]
     pub project: Option<String>,
 
+    /// Limit results to one section GID.
+    #[arg(long, conflicts_with_all = ["project", "assignee"])]
+    pub section: Option<String>,
+
     /// Limit results to an assignee GID, email, or `me`.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "section")]
     pub assignee: Option<String>,
 
     /// Include completed tasks. By default only open tasks are returned.

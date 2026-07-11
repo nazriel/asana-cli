@@ -28,11 +28,14 @@ Skip repeated context checks within the same task after authentication and works
 ## Choose the narrowest operation
 
 - List the current user's open work: `asana --json --workspace <gid> task list`.
+- Discover a project's sections: `asana --json section list --project <project-gid>`.
+- List open tasks in one section: `asana --json task list --section <section-gid>`.
 - Find tasks by text or filters: `asana --json --workspace <gid> task search <query> ...`.
 - Inspect one known task: `asana --json task get <task-gid>`.
 - Retrieve a complete task context: add `--comments --attachments` to `task get`.
 - Page through only comments or attachment metadata: use `task comments` or `attachment list`.
 - Discover project GIDs before project-scoped queries: use `project list`.
+- Resolve a section name to its GID with `section list`; never enumerate task details merely to filter their `memberships` by section.
 
 Use GIDs for identity. Names are display labels and may be duplicated. Do not infer a task GID from an Asana URL unless the value is unambiguous; search or list candidates when uncertain.
 

@@ -51,6 +51,15 @@ The default excludes archived projects. `--archived` and `--all-projects` confli
 
 ## Task lists
 
+Discover sections in a known project:
+
+```bash
+asana --json section list --project <project-gid>
+asana --json section list --project <project-gid> --limit 100 --offset '<opaque-offset>'
+```
+
+Section records contain `gid`, `name`, `created_at`, and `project`. Resolve a human section name to a GID before listing its tasks. Section names need not be globally unique.
+
 ```bash
 # Authenticated user's open tasks in the workspace
 asana --json --workspace <gid> task list
@@ -61,6 +70,9 @@ asana --json --workspace <gid> task list --assignee me
 # Tasks in one project
 asana --json task list --project <project-gid>
 
+# Open tasks in one section
+asana --json task list --section <section-gid>
+
 # Include completed tasks
 asana --json task list --project <project-gid> --include-completed
 
@@ -68,7 +80,7 @@ asana --json task list --project <project-gid> --include-completed
 asana --json --workspace <gid> task list --limit 100 --offset '<opaque-offset>'
 ```
 
-Without `--project`, the default is `--assignee me` and incomplete tasks only. With `--project`, no assignee is implied. `--include-completed` expands results rather than returning only completed tasks.
+Without `--project` or `--section`, the default is `--assignee me` and incomplete tasks only. With `--project` or `--section`, no assignee is implied. `--include-completed` expands results rather than returning only completed tasks. `--section` conflicts with `--project` and `--assignee`; use search when assignee filtering is also required.
 
 ## Task search
 
@@ -151,7 +163,7 @@ Attachment names are sanitized, signed URLs are refreshed before transfer, and e
 
 ## Pagination algorithm
 
-For `workspace list`, `project list`, `task list`, `task comments`, and `attachment list`:
+For `workspace list`, `project list`, `section list`, `task list`, `task comments`, and `attachment list`:
 
 1. Request the first page with the smallest useful `--limit` from 1 through 100.
 2. Consume `data`.

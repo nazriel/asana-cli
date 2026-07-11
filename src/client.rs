@@ -9,7 +9,9 @@ use serde::de::DeserializeOwned;
 
 use crate::{
     error::{Error, Result},
-    models::{ApiErrorResponse, ApiResponse, Attachment, Project, Story, Task, User, Workspace},
+    models::{
+        ApiErrorResponse, ApiResponse, Attachment, Project, Section, Story, Task, User, Workspace,
+    },
 };
 
 const DEFAULT_BASE_URL: &str = "https://app.asana.com/api/1.0/";
@@ -17,6 +19,7 @@ const USER_AGENT: &str = concat!("asana-cli/", env!("CARGO_PKG_VERSION"));
 
 const WORKSPACE_FIELDS: &str = "gid,name,is_organization";
 const PROJECT_FIELDS: &str = "gid,name,archived,color,owner.gid,owner.name,permalink_url";
+const SECTION_FIELDS: &str = "gid,name,created_at,project.gid,project.name";
 const TASK_LIST_FIELDS: &str = "gid,name,completed,completed_at,assignee.gid,assignee.name,due_on,due_at,modified_at,permalink_url";
 const TASK_DETAIL_FIELDS: &str = "gid,name,completed,completed_at,assignee.gid,assignee.name,due_on,due_at,start_on,notes,html_notes,created_at,modified_at,permalink_url,resource_subtype,workspace.gid,workspace.name,memberships.project.gid,memberships.project.name,memberships.section.gid,memberships.section.name";
 const STORY_FIELDS: &str =
@@ -118,10 +121,25 @@ impl AsanaClient {
         )
     }
 
+    pub fn list_sections(
+        &self,
+        project_gid: &str,
+        page: &Page,
+    ) -> Result<ApiResponse<Vec<Section>>> {
+        self.get_json(
+            &format!("projects/{project_gid}/sections"),
+            &with_page(
+                vec![("opt_fields".to_owned(), SECTION_FIELDS.to_owned())],
+                page,
+            ),
+        )
+    }
+
     pub fn list_tasks(
         &self,
         workspace_gid: Option<&str>,
         project_gid: Option<&str>,
+        section_gid: Option<&str>,
         assignee: Option<&str>,
         include_completed: bool,
         page: &Page,
@@ -141,7 +159,11 @@ impl AsanaClient {
             params.push(("completed_since".to_owned(), "now".to_owned()));
         }
 
-        self.get_json("tasks", &with_page(params, page))
+        let path = section_gid
+            .map(|gid| format!("sections/{gid}/tasks"))
+            .unwrap_or_else(|| "tasks".to_owned());
+
+        self.get_json(&path, &with_page(params, page))
     }
 
     pub fn search_tasks(

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#MISE description="Opt-in live Phase 2 smoke test against a dedicated Asana sandbox"
 set -euo pipefail
 
 # Opt-in live smoke test for Phase 2. Run only against a dedicated Asana sandbox.

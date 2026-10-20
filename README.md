@@ -4,12 +4,42 @@
 
 Typed commands cover daily work, project administration, people, custom-field schemas and values, portfolios, goals, memberships, and access requests. `asana api` provides guarded access to the remaining REST API while later resource families are added.
 
-## Build
+## Install
+
+Install the latest release binary into `~/.local/bin` and the agent skill into `~/.agents/skills/asana-cli` (linked into `~/.claude/skills` when Claude Code is present):
 
 ```bash
-cargo build --release
-./target/release/asana --help
+curl -fsSL https://raw.githubusercontent.com/nazriel/asana-cli/main/install.sh | sh
 ```
+
+Pass options after `sh -s --`, for example `--version v0.6.0`, `--bin-dir DIR`, `--skills-dir DIR`, `--no-bin`, or `--no-skill`. The installer verifies the archive against the release's `SHA256SUMS` and leaves an existing skill symlink, such as one pointing at a development checkout, untouched.
+
+Release archives cover macOS (Apple Silicon, Intel) and Linux (x86_64, aarch64; statically linked with musl) and are attached to each [GitHub release](https://github.com/nazriel/asana-cli/releases).
+
+## Development
+
+The toolchain and helper tools are pinned in [`mise.toml`](mise.toml) and [`mise.lock`](mise.lock). Cargo runs through [mr boxington](https://mr-boxington.jdx.dev) for shared compilation caching.
+
+```bash
+mise install
+mise run lint        # rustfmt, clippy, actionlint, shellcheck
+mise run test
+mise run dist        # release archive for the host in dist/
+mise tasks           # everything else
+```
+
+Tasks live in [`.mise/tasks`](.mise/tasks). CI runs `lint` and `test` on Linux and macOS and builds every release target on each push, which keeps a warm per-target cache on `main` for release builds.
+
+## Release
+
+Bump `version` in `Cargo.toml`, commit and push to `main`, then push a matching tag once CI has finished on that commit:
+
+```bash
+git tag v0.6.0
+git push origin v0.6.0
+```
+
+The [release workflow](.github/workflows/release.yml) checks that the tag matches `Cargo.toml`, runs the tests, builds the archives, and publishes a release with the changelog since the previous tag, download links, and `SHA256SUMS`. Tags containing `-` (for example `v0.6.0-rc.1`) are published as pre-releases.
 
 ## Shell completion
 
@@ -138,7 +168,7 @@ JSON data always goes to stdout. Errors and `--verbose` diagnostics go to stderr
 
 ## AI skill
 
-The repository includes an agent skill in [`skills/asana-cli`](skills/asana-cli). Install or link that directory in your agent's skill location to teach it how to query Asana safely through this CLI, handle pagination and errors, and retrieve attachments without exposing credentials.
+The repository includes an agent skill in [`skills/asana-cli`](skills/asana-cli). The [installer](#install) sets it up, or link that directory into your agent's skill location yourself to teach it how to query Asana safely through this CLI, handle pagination and errors, and retrieve attachments without exposing credentials.
 
 The completed four-phase personal-use scope and explicitly unplanned enterprise/infrastructure families are documented in [`docs/full-api-parity-plan.md`](docs/full-api-parity-plan.md).
 

@@ -11,7 +11,7 @@ Local evidence for `asana` 0.4:
 
 ## Live sandbox gate
 
-The opt-in suite is `scripts/smoke-phase2.sh`. It refuses to run unless all required sandbox variables and the exact confirmation value are present. It creates uniquely named projects, briefs, status updates, templates, duplicates, instantiated resources, and optional memberships/tasks. Its exit trap deletes only GIDs captured from resources created by that run.
+The opt-in suite is the `smoke:phase2` mise task ([`.mise/tasks/smoke/phase2`](../.mise/tasks/smoke/phase2)). It refuses to run unless all required sandbox variables and the exact confirmation value are present. It creates uniquely named projects, briefs, status updates, templates, duplicates, instantiated resources, and optional memberships/tasks. Its exit trap deletes only GIDs captured from resources created by that run.
 
 Configure authentication locally; never put a token in arguments or commit it:
 
@@ -21,7 +21,7 @@ ASANA_SMOKE_PROFILE=sandbox \
 ASANA_SMOKE_WORKSPACE=<sandbox-workspace-gid> \
 ASANA_SMOKE_TEAM=<sandbox-team-gid> \
 ASANA_SMOKE_CONFIRM=phase2-sandbox \
-scripts/smoke-phase2.sh
+mise run smoke:phase2
 ```
 
 Optional variables:

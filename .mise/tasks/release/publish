@@ -7,12 +7,12 @@ tag="$1"
 repo="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner --jq .nameWithOwner)}"
 
 shopt -s nullglob
-archives=(dist/*.tar.gz)
+archives=(dist/*.tar.gz dist/*.zip)
 if [[ ${#archives[@]} -eq 0 ]]; then
   echo "no archives in dist/; run \`mise run dist <target>\` first" >&2
   exit 1
 fi
-(cd dist && shasum -a 256 -- *.tar.gz > SHA256SUMS)
+(cd dist && shasum -a 256 -- "${archives[@]#dist/}" > SHA256SUMS)
 
 notes="$(mktemp)"
 trap 'rm -f "$notes"' EXIT

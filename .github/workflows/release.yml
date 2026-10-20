@@ -33,8 +33,6 @@ jobs:
   build:
     needs: verify
     uses: ./.github/workflows/build.yml
-    with:
-      upload: true
 
   publish:
     name: Publish GitHub release

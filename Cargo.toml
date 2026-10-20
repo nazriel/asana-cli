@@ -1,6 +1,6 @@
 [package]
 name = "asana-cli"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 description = "A small, agent-friendly CLI for the Asana API"
 license = "MIT"

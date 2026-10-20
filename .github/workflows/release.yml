@@ -24,6 +24,7 @@ jobs:
       - uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
         with:
           cache-generation: check
+          github-cache-mode: objects
 
       - run: mise run release:check-tag "$GITHUB_REF_NAME"
 

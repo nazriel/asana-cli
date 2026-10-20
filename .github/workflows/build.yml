@@ -45,10 +45,13 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
 
-      # After mise, so the cache key covers the pinned rustc.
+      # After mise, so the cache key covers the pinned rustc. The objects mode
+      # carries mbx's compiler cache; the default target mode leaves crates that
+      # generate files in OUT_DIR (serde_core, thiserror) stale after restore.
       - uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
         with:
           cache-generation: dist-${{ matrix.name }}
+          github-cache-mode: objects
 
       - run: mise run dist ${{ matrix.targets }}
 

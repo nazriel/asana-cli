@@ -319,8 +319,12 @@ pub enum JobCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum AuthCommand {
-    /// Store a personal access token in the operating-system keyring.
-    Login,
+    /// Open the Asana developer console to create a personal access token, then store it in the operating-system keyring.
+    Login {
+        /// Print the developer console URL instead of opening it in a browser.
+        #[arg(long)]
+        no_browser: bool,
+    },
     /// Show the authenticated user and token source.
     Status,
     /// Remove the locally stored token from the operating-system keyring.

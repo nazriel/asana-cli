@@ -88,8 +88,13 @@ fn run_auth(
     profile: &str,
 ) -> Result<()> {
     match command {
-        AuthCommand::Login => {
-            let user = auth::login(profile, options.verbose, options.request_timeout)?;
+        AuthCommand::Login { no_browser } => {
+            let user = auth::login(
+                profile,
+                no_browser,
+                options.verbose,
+                options.request_timeout,
+            )?;
             config.profile_mut(profile);
             config.save()?;
             if options.json {

@@ -1,4 +1,8 @@
-use std::{env, time::Duration};
+use std::{
+    env,
+    process::{Command, Stdio},
+    time::Duration,
+};
 
 use keyring::Entry;
 
@@ -9,6 +13,7 @@ use crate::{
 };
 
 const KEYRING_SERVICE: &str = "asana-cli";
+const DEVELOPER_CONSOLE_URL: &str = "https://app.asana.com/0/my-apps";
 
 #[derive(Debug, Clone, Copy)]
 pub enum TokenSource {
@@ -48,7 +53,26 @@ pub fn resolve_token(profile: &str) -> Result<(String, TokenSource)> {
     Ok((token, TokenSource::Keyring))
 }
 
-pub fn login(profile: &str, verbose: bool, request_timeout: Duration) -> Result<User> {
+pub fn login(
+    profile: &str,
+    no_browser: bool,
+    verbose: bool,
+    request_timeout: Duration,
+) -> Result<User> {
+    eprintln!("Create a personal access token in the Asana developer console:");
+    eprintln!();
+    eprintln!("  {DEVELOPER_CONSOLE_URL}");
+    eprintln!();
+    if !no_browser && open_browser(DEVELOPER_CONSOLE_URL) {
+        eprintln!(
+            "Opened it in your browser. Choose \"Create new token\", copy the token, and paste it below."
+        );
+    } else {
+        eprintln!(
+            "Open it in a browser, choose \"Create new token\", copy the token, and paste it below."
+        );
+    }
+
     let token = rpassword::prompt_password("Asana personal access token: ")
         .map_err(|error| Error::Auth(format!("could not read token: {error}")))?;
 
@@ -78,6 +102,32 @@ pub fn logout(profile: &str) -> Result<()> {
                 "could not remove the token from the keyring: {error}"
             ))
         })
+}
+
+/// Best-effort: returns whether a browser launcher was started. Failures fall
+/// back to the printed URL, so they are not reported.
+fn open_browser(url: &str) -> bool {
+    let mut command = if cfg!(target_os = "macos") {
+        Command::new("open")
+    } else if cfg!(windows) {
+        // `start` treats its first quoted argument as the window title.
+        let mut command = Command::new("cmd");
+        command.args(["/C", "start", ""]);
+        command
+    } else {
+        // Without a display, xdg-open may start a text browser in this terminal.
+        if env::var_os("DISPLAY").is_none() && env::var_os("WAYLAND_DISPLAY").is_none() {
+            return false;
+        }
+        Command::new("xdg-open")
+    };
+    command
+        .arg(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 fn keyring_entry(profile: &str) -> Result<Entry> {

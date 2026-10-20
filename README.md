@@ -75,12 +75,14 @@ The command does not modify `.bashrc`, `.zshrc`, or other shell startup files. I
 
 ## Authenticate
 
-Create a personal access token in the Asana developer console, then store it in the operating-system keyring:
+`asana auth login` opens the [Asana developer console](https://app.asana.com/0/my-apps) in your browser. Choose **Create new token**, then paste the token at the prompt. The CLI verifies it and stores it in the operating-system keyring:
 
 ```bash
 asana auth login
 asana auth status
 ```
+
+Pass `--no-browser` to print the console URL without opening it, for example over SSH.
 
 For CI, scripts, and agents, do not place a token in a config file. Set it only for the process instead:
 

@@ -1,7 +1,7 @@
 name: Build
 
 # Release archives for every supported target. Called by CI on every push so
-# the default branch keeps a warm cache per target, and by the release workflow
+# the default branch keeps a warm cache per runner, and by the release workflow
 # with the same steps, so a tagged build restores that cache.
 on:
   workflow_call:
@@ -16,20 +16,23 @@ permissions:
 
 jobs:
   dist:
-    name: Dist ${{ matrix.target }}
+    name: Dist ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-musl
+          - name: linux-x86_64
             os: ubuntu-24.04
-          - target: aarch64-unknown-linux-musl
+            targets: x86_64-unknown-linux-musl
+          - name: linux-aarch64
             os: ubuntu-24.04-arm
-          - target: x86_64-apple-darwin
+            targets: aarch64-unknown-linux-musl
+          # Both Apple targets in one job: one macOS runner to wait for, and
+          # host build dependencies compiled once.
+          - name: macos
             os: macos-15
-          - target: aarch64-apple-darwin
-            os: macos-15
+            targets: aarch64-apple-darwin x86_64-apple-darwin
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -42,17 +45,16 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
 
-      # After mise, so the cache key covers the pinned rustc. One cache series
-      # per target keeps the two macOS targets from sharing an entry.
+      # After mise, so the cache key covers the pinned rustc.
       - uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
         with:
-          cache-generation: dist-${{ matrix.target }}
+          cache-generation: dist-${{ matrix.name }}
 
-      - run: mise run dist ${{ matrix.target }}
+      - run: mise run dist ${{ matrix.targets }}
 
       - if: inputs.upload
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: dist-${{ matrix.target }}
+          name: dist-${{ matrix.name }}
           path: dist/*.tar.gz
           if-no-files-found: error

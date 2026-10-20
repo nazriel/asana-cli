@@ -1,20 +1,28 @@
 #!/usr/bin/env bash
-#MISE description="Build a release binary and package it as dist/asana-v<version>-<target>.tar.gz"
-#USAGE arg "[target]" help="Rust target triple (defaults to the host)"
+#MISE description="Build release binaries and package them as dist/asana-v<version>-<target>.tar.gz"
+#USAGE arg "[target]" var=#true help="Rust target triples (defaults to the host)"
 set -euo pipefail
 
-target="${1:-$(rustc -vV | sed -n 's/^host: //p')}"
+targets=("$@")
+if [[ ${#targets[@]} -eq 0 ]]; then
+  targets=("$(rustc -vV | sed -n 's/^host: //p')")
+fi
 version="$(cargo pkgid | sed 's/.*[#@]//')"
-archive="asana-v${version}-${target}"
 
-rustup target add "$target"
-cargo build --release --locked --target "$target"
+rustup target add "${targets[@]}"
+target_args=()
+for target in "${targets[@]}"; do
+  target_args+=(--target "$target")
+done
+cargo build --release --locked "${target_args[@]}"
 
-rm -rf "dist/${archive}" "dist/${archive}.tar.gz"
-mkdir -p "dist/${archive}"
-cp "target/${target}/release/asana" README.md "dist/${archive}/"
-mkdir -p "dist/${archive}/skills"
-cp -R skills/asana-cli "dist/${archive}/skills/"
-tar -C dist -czf "dist/${archive}.tar.gz" "${archive}"
-rm -rf "dist/${archive}"
-echo "dist/${archive}.tar.gz"
+for target in "${targets[@]}"; do
+  archive="asana-v${version}-${target}"
+  rm -rf "dist/${archive}" "dist/${archive}.tar.gz"
+  mkdir -p "dist/${archive}/skills"
+  cp "target/${target}/release/asana" README.md "dist/${archive}/"
+  cp -R skills/asana-cli "dist/${archive}/skills/"
+  tar -C dist -czf "dist/${archive}.tar.gz" "${archive}"
+  rm -rf "dist/${archive}"
+  echo "dist/${archive}.tar.gz"
+done

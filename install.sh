@@ -11,6 +11,9 @@
 #   --no-bin           install only the skill
 #   --no-skill         install only the binary
 #
+# ASANA_DOWNLOAD_URL replaces the release download URL (a mirror, or a local
+# server in CI); it must serve the archive and SHA256SUMS for the version.
+#
 # The skill is linked into ~/.claude/skills when ~/.claude exists. An existing
 # skill that is a symlink (for example to a development checkout) is left alone.
 set -eu
@@ -77,7 +80,7 @@ if [ "$version" = "latest" ]; then
 fi
 
 archive="asana-${version}-${target}"
-base="https://github.com/${repo}/releases/download/${version}"
+base="${ASANA_DOWNLOAD_URL:-https://github.com/${repo}/releases/download/${version}}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT INT TERM
 

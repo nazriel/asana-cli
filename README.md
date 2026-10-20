@@ -6,15 +6,29 @@ Typed commands cover daily work, project administration, people, custom-field sc
 
 ## Install
 
-Install the latest release binary into `~/.local/bin` and the agent skill into `~/.agents/skills/asana-cli` (linked into `~/.claude/skills` when Claude Code is present):
+On macOS and Linux, install the latest release binary into `~/.local/bin` and the agent skill into `~/.agents/skills/asana-cli` (linked into `~/.claude/skills` when Claude Code is present):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nazriel/asana-cli/main/install.sh | sh
 ```
 
-Pass options after `sh -s --`, for example `--version v0.6.0`, `--bin-dir DIR`, `--skills-dir DIR`, `--no-bin`, or `--no-skill`. The installer verifies the archive against the release's `SHA256SUMS` and leaves an existing skill symlink, such as one pointing at a development checkout, untouched.
+Pass options after `sh -s --`, for example `--version v0.6.0`, `--bin-dir DIR`, `--skills-dir DIR`, `--no-bin`, or `--no-skill`.
 
-Release archives cover macOS (Apple Silicon, Intel) and Linux (x86_64, aarch64; statically linked with musl) and are attached to each [GitHub release](https://github.com/nazriel/asana-cli/releases).
+On Windows, in PowerShell 5.1 or 7:
+
+```powershell
+irm https://raw.githubusercontent.com/nazriel/asana-cli/main/install.ps1 | iex
+```
+
+This installs `asana.exe` into `~\.local\bin`, adds that directory to the user `PATH`, and installs the skill the same way (with a junction into `~\.claude\skills`). To pass parameters such as `-Version`, `-BinDir`, `-SkillsDir`, `-NoBin`, `-NoSkill`, or `-NoModifyPath`, run it as a script block:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/nazriel/asana-cli/main/install.ps1))) -Version v0.7.0
+```
+
+Both installers verify the archive against the release's `SHA256SUMS` and leave an existing skill link, such as one pointing at a development checkout, untouched.
+
+Release archives cover macOS (Apple Silicon, Intel), Linux (x86_64, aarch64; statically linked with musl), and Windows (x86_64, ARM64) and are attached to each [GitHub release](https://github.com/nazriel/asana-cli/releases).
 
 ## Development
 
@@ -28,7 +42,7 @@ mise run dist        # release archive for the host in dist/
 mise tasks           # everything else
 ```
 
-Tasks live in [`.mise/tasks`](.mise/tasks). CI runs `lint` and `test` on Linux and macOS and builds every release target on each push, which keeps a warm per-target cache on `main` for release builds.
+Tasks live in [`.mise/tasks`](.mise/tasks). CI runs `lint` on Linux and `test` on Linux, macOS, and Windows, builds every release target, and runs both installers against the fresh archives on each push. Pushes to `main` keep a warm per-runner cache for release builds.
 
 ## Release
 

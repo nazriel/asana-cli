@@ -5,11 +5,6 @@ name: Build
 # with the same steps, so a tagged build restores that cache.
 on:
   workflow_call:
-    inputs:
-      upload:
-        description: Upload the archives as workflow artifacts
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -33,6 +28,12 @@ jobs:
           - name: macos
             os: macos-15
             targets: aarch64-apple-darwin x86_64-apple-darwin
+          - name: windows-x86_64
+            os: windows-2025
+            targets: x86_64-pc-windows-msvc
+          - name: windows-aarch64
+            os: windows-11-arm
+            targets: aarch64-pc-windows-msvc
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -55,9 +56,65 @@ jobs:
 
       - run: mise run dist ${{ matrix.targets }}
 
-      - if: inputs.upload
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-${{ matrix.name }}
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
           if-no-files-found: error
+          retention-days: 7
+
+  # Runs the one-line installers against the archives just built, served
+  # from a local HTTP server in place of the GitHub release.
+  install:
+    name: Install ${{ matrix.os }}
+    needs: dist
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: release
+          pattern: dist-*
+          merge-multiple: true
+
+      - name: Install from a local release
+        run: |
+          version="v$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
+          cp install.sh install.ps1 release/
+          sha256="$(command -v sha256sum || echo "shasum -a 256")"
+          (cd release && $sha256 -- *.tar.gz *.zip > SHA256SUMS)
+
+          python="$(command -v python || command -v python3)"
+          "$python" -m http.server 8765 --bind 127.0.0.1 --directory release > /dev/null 2>&1 &
+          trap 'kill $!' EXIT
+          url=http://127.0.0.1:8765
+          for _ in $(seq 30); do curl -fsS -o /dev/null "$url/SHA256SUMS" && break; sleep 1; done
+
+          export ASANA_DOWNLOAD_URL="$url" ASANA_VERSION="$version"
+          check() {
+            "$1" --version | grep -Fx "asana ${version#v}"
+            test -f "$2/asana-cli/SKILL.md"
+          }
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            dir="$(cygpath -w "$RUNNER_TEMP")"
+            tmp="$(cygpath -u "$RUNNER_TEMP")"
+            pwsh -NoProfile -File install.ps1 -BinDir "$dir\\pwsh\\bin" -SkillsDir "$dir\\pwsh\\skills"
+            check "$tmp/pwsh/bin/asana.exe" "$tmp/pwsh/skills"
+            ASANA_BIN_DIR="$dir\\ps5\\bin" ASANA_SKILLS_DIR="$dir\\ps5\\skills" \
+              powershell -NoProfile -ExecutionPolicy Bypass -Command "irm $url/install.ps1 | iex"
+            check "$tmp/ps5/bin/asana.exe" "$tmp/ps5/skills"
+          else
+            curl -fsSL "$url/install.sh" |
+              ASANA_BIN_DIR="$RUNNER_TEMP/sh/bin" ASANA_SKILLS_DIR="$RUNNER_TEMP/sh/skills" sh
+            check "$RUNNER_TEMP/sh/bin/asana" "$RUNNER_TEMP/sh/skills"
+          fi

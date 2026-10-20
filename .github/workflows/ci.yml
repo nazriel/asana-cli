@@ -37,6 +37,8 @@ jobs:
 
       - name: Test
         run: mise run test
+        env:
+          CARGO_LOG: cargo::core::compiler::fingerprint=info
 
   build:
     uses: ./.github/workflows/build.yml
